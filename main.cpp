@@ -109,7 +109,7 @@ std::pair<std::vector<cv::RotatedRect>, cv::Mat> get_detected_boxes(
     cv::threshold(textmap_cv, text_score, low_text, 1, 0);
     cv::threshold(linkmap_cv, link_score, link_threshold, 1, 0);
 
-    cv::Mat text_score_comb = cv::min(text_score + link_score, 1);
+    cv::Mat text_score_comb = cv::min(cv::max(text_score + link_score, 0.0), 1.0);
     text_score_comb.convertTo(text_score_comb, CV_8U);
 
     cv::Mat labels, stats;
@@ -206,6 +206,29 @@ std::pair<std::vector<cv::RotatedRect>, cv::Mat> get_detected_boxes(
     return std::make_pair(det, labels);
 }
 
+std::vector<cv::RotatedRect> adjust_result_coordinates(const std::vector<cv::RotatedRect> &polys, float ratio_w, float ratio_h, float ratio_net = 2)
+{
+    std::vector<cv::RotatedRect> adjusted_polys;
+
+    for (const auto &poly : polys)
+    {
+        cv::Point2f corners[4];
+        poly.points(corners);
+
+        for (int i = 0; i < 4; ++i)
+        {
+            corners[i].x *= (ratio_w * ratio_net);
+            corners[i].y *= (ratio_h * ratio_net);
+        }
+
+        cv::RotatedRect adjusted_rect(cv::Point2f(0, 0), cv::Size2f(0, 0), 0);
+        adjusted_rect.points(corners);
+        adjusted_polys.push_back(adjusted_rect);
+    }
+
+    return adjusted_polys;
+}
+
 int main(int argc, const char *argv[])
 {
     // if (argc != 2)
@@ -298,19 +321,24 @@ int main(int argc, const char *argv[])
             auto det = result.first;
             auto labels = result.second;
 
+            // auto boxes = adjust_resul_coordinates(det, ratio_w, ratio_h);
+
             // Print results
-            std::cout << "Detected boxes: " << det.size() << std::endl;
-            for (const auto &box : det)
-            {
-                cv::Point2f corners[4];
-                box.points(corners);
-                std::cout << "Box: ";
-                for (int i = 0; i < 4; ++i)
-                {
-                    std::cout << "(" << corners[i].x << ", " << corners[i].y << ") ";
-                }
-                std::cout << std::endl;
-            }
+            // std::cout << "Detected boxes: " << det.size() << std::endl;
+            // for (const auto &box : det)
+            // {
+            //     cv::Point2f corners[4];
+            //     box.points(corners);
+            //     std::cout << "Box: ";
+            //     for (int i = 0; i < 4; ++i)
+            //     {
+            //         std::cout << "(" << corners[i].x << ", " << corners[i].y << ") ";
+            //     }
+            //     std::cout << std::endl;
+            // }
+
+            // @TODO - need to scale detected bounding boxes back to original input image size
+            // using adjust_result_coordinates
 
             // Draw the detected boxes on the image
             for (const auto &box : det)
