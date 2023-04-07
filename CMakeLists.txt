@@ -34,6 +34,8 @@ set(Torch_DIR "/Users/jackvial/Code/CPlusPlus/torchscript_example/libtorch/share
 find_package(Torch REQUIRED)
 
 # Find OpenCV
+# Try only include only used parts of opencv with  FIND_PACKAGE( OpenCV REQUIRED core imgproc)
+# See https://stackoverflow.com/questions/11196720/cmake-how-to-only-include-part-of-opencv
 find_package(OpenCV 4 REQUIRED)
 
 # Create executable
