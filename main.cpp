@@ -70,6 +70,24 @@ void print_tensor_dims(std::string label, torch::Tensor t)
     std::cout << ")" << std::endl;
 }
 
+void display_2d_tensor_heatmap(torch::Tensor t)
+{
+    // Normalize the tensor to the range [0, 1]
+    torch::Tensor tensor_normalized = (t - t.min()) / (t.max() - t.min());
+
+    // Convert the normalized tensor to an OpenCV Mat
+    cv::Mat mat(tensor_normalized.size(0), tensor_normalized.size(1), CV_32F, tensor_normalized.data_ptr<float>());
+
+    // Convert the normalized Mat to a heatmap
+    cv::Mat heatmap;
+    mat.convertTo(heatmap, CV_8UC1, 255);
+    cv::applyColorMap(heatmap, heatmap, cv::COLORMAP_JET);
+
+    // Display the heatmap
+    cv::imshow("Heatmap", heatmap);
+    cv::waitKey(0);
+}
+
 int main(int argc, const char *argv[])
 {
     // if (argc != 2)
@@ -103,9 +121,7 @@ int main(int argc, const char *argv[])
     }
 
     // torch.Size([1, 3, 672, 1248])
-
-    cv::resize(image, image, cv::Size(672, 1248));
-    // cv::resize(image, image, cv::Size(200, 400));
+    cv::resize(image, image, cv::Size(1248, 672));
     cv::cvtColor(image, image, cv::COLOR_BGR2RGB);
 
     torch::Tensor image_tensor = torch::from_blob(
@@ -150,20 +166,8 @@ int main(int argc, const char *argv[])
             print_tensor_dims(" score_text ", score_text);
             print_tensor_dims(" score_link ", score_link);
 
-            // Normalize the tensor to the range [0, 1]
-            torch::Tensor tensor_normalized = (score_text - score_text.min()) / (score_text.max() - score_text.min());
-
-            // Convert the normalized tensor to an OpenCV Mat
-            cv::Mat mat(tensor_normalized.size(0), tensor_normalized.size(1), CV_32F, tensor_normalized.data_ptr<float>());
-
-            // Convert the normalized Mat to a heatmap
-            cv::Mat heatmap;
-            mat.convertTo(heatmap, CV_8UC1, 255);
-            cv::applyColorMap(heatmap, heatmap, cv::COLORMAP_JET);
-
-            // Display the heatmap
-            cv::imshow("Heatmap", heatmap);
-            cv::waitKey(0);
+            display_2d_tensor_heatmap(score_text);
+            display_2d_tensor_heatmap(score_link);
         }
 
         // std::cout << "Output tensor 1: " << output_tensor_1 << "\n";
