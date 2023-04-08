@@ -39,7 +39,7 @@ find_package(Torch REQUIRED)
 find_package(OpenCV 4 REQUIRED)
 
 # Create executable
-set(SOURCES main.cpp)
+set(SOURCES main.cpp utils.cpp)
 add_executable(${PROJECT_NAME} ${SOURCES})
 
 # Link libraries
