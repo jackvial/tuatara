@@ -206,6 +206,53 @@ std::pair<std::vector<cv::RotatedRect>, cv::Mat> get_detected_boxes(
     return std::make_pair(det, labels);
 }
 
+cv::Mat normalize_mean_variance(
+    const cv::Mat &in_img,
+    const cv::Scalar &mean = cv::Scalar(0.485, 0.456, 0.406),
+    const cv::Scalar &variance = cv::Scalar(0.229, 0.224, 0.225))
+{
+    cv::Mat img = in_img.clone();
+    img.convertTo(img, CV_32FC3);
+
+    img -= mean * 255.0;
+    img /= variance * 255.0;
+
+    return img;
+}
+
+std::tuple<cv::Mat, float, cv::Size> resize_aspect_ratio(
+    const cv::Mat &img, int square_size, int interpolation, float mag_ratio = 1)
+{
+    int height = img.rows;
+    int width = img.cols;
+    int channel = img.channels();
+
+    float target_size = mag_ratio * std::max(height, width);
+
+    if (target_size > square_size)
+    {
+        target_size = square_size;
+    }
+
+    float ratio = target_size / std::max(height, width);
+
+    int target_h = static_cast<int>(height * ratio);
+    int target_w = static_cast<int>(width * ratio);
+
+    cv::Mat proc;
+    cv::resize(img, proc, cv::Size(target_w, target_h), 0, 0, interpolation);
+
+    int target_h32 = target_h % 32 != 0 ? target_h + (32 - target_h % 32) : target_h;
+    int target_w32 = target_w % 32 != 0 ? target_w + (32 - target_w % 32) : target_w;
+
+    cv::Mat resized = cv::Mat::zeros(target_h32, target_w32, img.type());
+    proc.copyTo(resized(cv::Rect(0, 0, target_w, target_h)));
+
+    cv::Size size_heatmap(target_w / 2, target_h / 2);
+
+    return std::make_tuple(resized, ratio, size_heatmap);
+}
+
 std::vector<cv::RotatedRect> adjust_result_coordinates(const std::vector<cv::RotatedRect> &polys, float ratio_w, float ratio_h, float ratio_net = 2)
 {
     std::vector<cv::RotatedRect> adjusted_polys;
@@ -221,22 +268,64 @@ std::vector<cv::RotatedRect> adjust_result_coordinates(const std::vector<cv::Rot
             corners[i].y *= (ratio_h * ratio_net);
         }
 
-        cv::RotatedRect adjusted_rect(cv::Point2f(0, 0), cv::Size2f(0, 0), 0);
-        adjusted_rect.points(corners);
+        // cv::RotatedRect adjusted_rect(cv::Point2f(0, 0), cv::Size2f(0, 0), 0);
+        cv::RotatedRect adjusted_rect = cv::minAreaRect(std::vector<cv::Point2f>(corners, corners + 4));
+        // adjusted_rect.points(corners);
         adjusted_polys.push_back(adjusted_rect);
     }
 
     return adjusted_polys;
 }
 
+void draw_bounding_boxes_on_background(const std::vector<cv::RotatedRect> &boxes)
+{
+    // Find the enclosing background size
+    float min_x = FLT_MAX, min_y = FLT_MAX, max_x = FLT_MIN, max_y = FLT_MIN;
+
+    for (const auto &box : boxes)
+    {
+        cv::Point2f corners[4];
+        box.points(corners);
+
+        for (int i = 0; i < 4; ++i)
+        {
+            min_x = std::min(min_x, corners[i].x);
+            min_y = std::min(min_y, corners[i].y);
+            max_x = std::max(max_x, corners[i].x);
+            max_y = std::max(max_y, corners[i].y);
+        }
+    }
+
+    int background_width = static_cast<int>(max_x - min_x) + 1;
+    int background_height = static_cast<int>(max_y - min_y) + 1;
+
+    // Create a new image (background) with the enclosing size
+    cv::Mat background = cv::Mat::zeros(cv::Size(background_width, background_height), CV_8UC3);
+
+    // Draw the bounding boxes on the background
+    for (const auto &box : boxes)
+    {
+        cv::Point2f corners[4];
+        box.points(corners);
+
+        // Shift corner points to the new coordinate system of the background image
+        for (int i = 0; i < 4; ++i)
+        {
+            corners[i].x -= min_x;
+            corners[i].y -= min_y;
+        }
+
+        std::vector<cv::Point> corners_vec(corners, corners + 4);
+        cv::polylines(background, corners_vec, true, cv::Scalar(0, 255, 0), 2);
+    }
+
+    // Display the background image with bounding boxes
+    cv::imshow("Bounding Boxes", background);
+    cv::waitKey(0);
+}
+
 int main(int argc, const char *argv[])
 {
-    // if (argc != 2)
-    // {
-    //     std::cerr << "usage: torchscript_example <path-to-exported-script-module>\n";
-    //     return -1;
-    // }
-
     std::string model_path = "/Users/jackvial/Code/CPlusPlus/torchscript_example/weights/craft_traced_torchscript_model.pt";
 
     // Deserialize the TorchScript module from a file
@@ -255,6 +344,7 @@ int main(int argc, const char *argv[])
 
     std::string image_path = "/Users/jackvial/Code/CPlusPlus/torchscript_example/images/table_english.png";
     cv::Mat image = cv::imread(image_path, cv::IMREAD_COLOR);
+    cv::Mat image_original = cv::imread(image_path, cv::IMREAD_COLOR);
     if (image.empty())
     {
         std::cerr << "Error reading image from file\n";
@@ -262,11 +352,28 @@ int main(int argc, const char *argv[])
     }
 
     // torch.Size([1, 3, 672, 1248])
-    cv::resize(image, image, cv::Size(312 * 4, 168 * 4));
+    // cv::resize(image, image, cv::Size(312 * 2, 168 * 2));
     cv::cvtColor(image, image, cv::COLOR_BGR2RGB);
 
+    // cv::Mat img_cv_grey;
+    // cv::cvtColor(image, img_cv_grey, cv::COLOR_BGR2GRAY);
+
+    float canvas_size = 2560;
+    float mag_ratio = 1.0;
+
+    cv::Mat image_resized;
+    float target_ratio;
+    cv::Size size_heatmap; // TODO - can probably get rid of this size_heatmap var
+    std::tie(image_resized, target_ratio, size_heatmap) = resize_aspect_ratio(
+        image, canvas_size, cv::INTER_LINEAR, mag_ratio);
+
+    float ratio_h = 1 / target_ratio;
+    float ratio_w = 1 / target_ratio;
+
+    // cv::Mat image_normalized = normalize_mean_variance(image);
+
     torch::Tensor image_tensor = torch::from_blob(
-        image.data, {1, image.rows, image.cols, 3}, torch::kByte);
+        image_resized.data, {1, image_resized.rows, image_resized.cols, 3}, torch::kByte);
 
     image_tensor = image_tensor.permute({0, 3, 1, 2}); // Rearrange dimensions to {1, 3, 32, 128}
     image_tensor = image_tensor.to(torch::kFloat);
@@ -307,8 +414,8 @@ int main(int argc, const char *argv[])
             print_tensor_dims(" score_text ", score_text);
             print_tensor_dims(" score_link ", score_link);
 
-            // display_2d_tensor_heatmap(score_text);
-            // display_2d_tensor_heatmap(score_link);
+            display_2d_tensor_heatmap(score_text);
+            display_2d_tensor_heatmap(score_link);
 
             // Set parameters for the function
             float text_threshold = 0.7;
@@ -321,27 +428,42 @@ int main(int argc, const char *argv[])
             auto det = result.first;
             auto labels = result.second;
 
-            // auto boxes = adjust_resul_coordinates(det, ratio_w, ratio_h);
+            std::cout << "Box before adjustment: " << det.size() << std::endl;
+            for (const auto &box : det)
+            {
+                cv::Point2f corners[4];
+                box.points(corners);
+                std::cout << "Box BA: ";
+                for (int i = 0; i < 4; ++i)
+                {
+                    std::cout << "(" << corners[i].x << ", " << corners[i].y << ") ";
+                }
+                std::cout << std::endl;
+            }
+
+            auto boxes = adjust_result_coordinates(det, ratio_w, ratio_h);
 
             // Print results
-            // std::cout << "Detected boxes: " << det.size() << std::endl;
-            // for (const auto &box : det)
-            // {
-            //     cv::Point2f corners[4];
-            //     box.points(corners);
-            //     std::cout << "Box: ";
-            //     for (int i = 0; i < 4; ++i)
-            //     {
-            //         std::cout << "(" << corners[i].x << ", " << corners[i].y << ") ";
-            //     }
-            //     std::cout << std::endl;
-            // }
+            std::cout << "Box after adjustment: " << boxes.size() << std::endl;
+            for (const auto &box : boxes)
+            {
+                cv::Point2f corners[4];
+                box.points(corners);
+                std::cout << "Box AA: ";
+                for (int i = 0; i < 4; ++i)
+                {
+                    std::cout << "(" << corners[i].x << ", " << corners[i].y << ") ";
+                }
+                std::cout << std::endl;
+            }
+
+            draw_bounding_boxes_on_background(boxes);
 
             // @TODO - need to scale detected bounding boxes back to original input image size
             // using adjust_result_coordinates
 
             // Draw the detected boxes on the image
-            for (const auto &box : det)
+            for (const auto &box : boxes)
             {
                 cv::Point2f corners[4];
                 box.points(corners);
