@@ -398,37 +398,14 @@ int main(int argc, const char *argv[])
 
             // Create a vector to store the cropped images
             std::vector<cv::Mat> cropped_images;
-
-            // Iterate through the bounding boxes
-            int counter = 0;
             for (const cv::RotatedRect &box : boxes)
             {
-                // Check the aspect ratio and correct the rotation angle if necessary
-                float angle = box.angle;
-                if (box.size.width < box.size.height)
-                {
-                    angle += 90;
-                }
-
-                // Get the rotation matrix
-                cv::Mat rotation_matrix = cv::getRotationMatrix2D(box.center, box.angle, 1.0);
-
-                // Apply the rotation
-                cv::Mat rotated_image;
-                cv::warpAffine(image, rotated_image, rotation_matrix, image.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
-
                 // Get the bounding rectangle of the rotated box
                 cv::Rect bounding_rect = box.boundingRect();
 
                 // Crop the rotated image using the bounding rectangle
-                cv::Mat cropped_image = rotated_image(bounding_rect);
+                cv::Mat cropped_image = image(bounding_rect);
                 cropped_images.push_back(cropped_image);
-
-                // Save the cropped image
-                // std::string filename = "/Users/jackvial/Code/CPlusPlus/torchscript_example/outputs/item_" + std::to_string(counter) + ".jpg";
-                // cv::imwrite(filename, cropped_image);
-
-                counter++;
             }
 
             // Create a black image to place the cropped images
