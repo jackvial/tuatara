@@ -65,14 +65,8 @@ std::pair<std::vector<cv::RotatedRect>, cv::Mat> get_detected_boxes(
     torch::Tensor textmap_normalized = (textmap - textmap.min()) / (textmap.max() - textmap.min());
     torch::Tensor linkmap_normalized = (linkmap - linkmap.min()) / (linkmap.max() - linkmap.min());
 
-    display_2d_tensor_heatmap("get_detected_boxes textmap", textmap_normalized);
-
     // Convert the normalized tensor to an OpenCV Mat
     cv::Mat textmap_cv(textmap_normalized.size(0), textmap_normalized.size(1), CV_32F, textmap_normalized.data_ptr<float>());
-
-    cv::imshow("textmap_cv", textmap_cv);
-    cv::waitKey(0);
-
     cv::Mat linkmap_cv(linkmap_normalized.size(0), linkmap_normalized.size(1), CV_32F, linkmap_normalized.data_ptr<float>());
 
     int img_h = textmap_cv.rows;
@@ -84,14 +78,6 @@ std::pair<std::vector<cv::RotatedRect>, cv::Mat> get_detected_boxes(
 
     cv::Mat text_score_comb = cv::min(cv::max(text_score + link_score, 0.0), 1.0);
     text_score_comb.convertTo(text_score_comb, CV_8U);
-
-    // ==== DEBUG ====
-    cv::Mat text_score_comb_display;
-    text_score_comb.convertTo(text_score_comb_display, CV_8UC1, 255);
-    // cv::applyColorMap(text_score_comb_display, text_score_comb_display, cv::COLORMAP_JET);
-    cv::imshow("text_score_comb_display", text_score_comb_display);
-    cv::waitKey(0);
-    // ==============
 
     cv::Mat labels, stats;
     cv::Mat centroids;
@@ -391,7 +377,7 @@ int main(int argc, const char *argv[])
                 std::cout << std::endl;
             }
 
-            draw_bounding_boxes_on_background(boxes);
+            // draw_bounding_boxes_on_background(boxes);
 
             // @TODO - need to scale detected bounding boxes back to original input image size
             // using adjust_result_coordinates
@@ -409,10 +395,63 @@ int main(int argc, const char *argv[])
             cv::namedWindow("Detected Boxes", cv::WINDOW_NORMAL);
             cv::imshow("Detected Boxes", image);
             cv::waitKey(0);
-        }
 
-        // std::cout << "Output tensor 1: " << output_tensor_1 << "\n";
-        // std::cout << "Output tensor 2: " << output_tensor_2 << "\n";
+            // Create a vector to store the cropped images
+            std::vector<cv::Mat> cropped_images;
+
+            // Iterate through the bounding boxes
+            int counter = 0;
+            for (const cv::RotatedRect &box : boxes)
+            {
+                // Check the aspect ratio and correct the rotation angle if necessary
+                float angle = box.angle;
+                if (box.size.width < box.size.height)
+                {
+                    angle += 90;
+                }
+
+                // Get the rotation matrix
+                cv::Mat rotation_matrix = cv::getRotationMatrix2D(box.center, box.angle, 1.0);
+
+                // Apply the rotation
+                cv::Mat rotated_image;
+                cv::warpAffine(image, rotated_image, rotation_matrix, image.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+
+                // Get the bounding rectangle of the rotated box
+                cv::Rect bounding_rect = box.boundingRect();
+
+                // Crop the rotated image using the bounding rectangle
+                cv::Mat cropped_image = rotated_image(bounding_rect);
+                cropped_images.push_back(cropped_image);
+
+                // Save the cropped image
+                // std::string filename = "/Users/jackvial/Code/CPlusPlus/torchscript_example/outputs/item_" + std::to_string(counter) + ".jpg";
+                // cv::imwrite(filename, cropped_image);
+
+                counter++;
+            }
+
+            // Create a black image to place the cropped images
+            int max_height = 0;
+            int total_width = 0;
+
+            for (const cv::Mat &cropped_image : cropped_images)
+            {
+                max_height = std::max(max_height, cropped_image.rows);
+                total_width += cropped_image.cols;
+            }
+
+            cv::Mat all_cropped_images = cv::Mat::zeros(image.size(), image.type());
+
+            // Place the cropped images onto the black background
+            for (size_t i = 0; i < cropped_images.size(); i++)
+            {
+                cv::Rect bounding_rect = boxes[i].boundingRect();
+                cropped_images[i].copyTo(all_cropped_images(bounding_rect));
+            }
+            // Save all_cropped_images
+            cv::imwrite("/Users/jackvial/Code/CPlusPlus/torchscript_example/outputs/all_cropped_images.jpg", all_cropped_images);
+        }
     }
     else
     {
