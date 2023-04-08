@@ -62,12 +62,18 @@ std::pair<std::vector<cv::RotatedRect>, cv::Mat> get_detected_boxes(
     torch::Tensor textmap, torch::Tensor linkmap, float text_threshold,
     float link_threshold, float low_text, bool estimate_num_chars = false)
 {
-    // Convert the normalized tensor to an OpenCV Mat
-    cv::Mat textmap_cv(textmap.size(0), textmap.size(1), CV_32F, textmap.data_ptr<float>());
-    // cv::Mat textmap_cv = textmap.to(torch::kF32).mul(255).clamp(0, 255).to(torch::kU8).squeeze().detach().numpy().clone();
+    torch::Tensor textmap_normalized = (textmap - textmap.min()) / (textmap.max() - textmap.min());
+    torch::Tensor linkmap_normalized = (linkmap - linkmap.min()) / (linkmap.max() - linkmap.min());
 
-    cv::Mat linkmap_cv(linkmap.size(0), linkmap.size(1), CV_32F, linkmap.data_ptr<float>());
-    // cv::Mat linkmap_cv = linkmap.to(torch::kF32).mul(255).clamp(0, 255).to(torch::kU8).squeeze().detach().numpy().clone();
+    display_2d_tensor_heatmap("get_detected_boxes textmap", textmap_normalized);
+
+    // Convert the normalized tensor to an OpenCV Mat
+    cv::Mat textmap_cv(textmap_normalized.size(0), textmap_normalized.size(1), CV_32F, textmap_normalized.data_ptr<float>());
+
+    cv::imshow("textmap_cv", textmap_cv);
+    cv::waitKey(0);
+
+    cv::Mat linkmap_cv(linkmap_normalized.size(0), linkmap_normalized.size(1), CV_32F, linkmap_normalized.data_ptr<float>());
 
     int img_h = textmap_cv.rows;
     int img_w = textmap_cv.cols;
@@ -79,9 +85,17 @@ std::pair<std::vector<cv::RotatedRect>, cv::Mat> get_detected_boxes(
     cv::Mat text_score_comb = cv::min(cv::max(text_score + link_score, 0.0), 1.0);
     text_score_comb.convertTo(text_score_comb, CV_8U);
 
+    // ==== DEBUG ====
+    cv::Mat text_score_comb_display;
+    text_score_comb.convertTo(text_score_comb_display, CV_8UC1, 255);
+    // cv::applyColorMap(text_score_comb_display, text_score_comb_display, cv::COLORMAP_JET);
+    cv::imshow("text_score_comb_display", text_score_comb_display);
+    cv::waitKey(0);
+    // ==============
+
     cv::Mat labels, stats;
     cv::Mat centroids;
-    int nLabels = cv::connectedComponentsWithStats(text_score_comb, labels, stats, centroids);
+    int nLabels = cv::connectedComponentsWithStats(text_score_comb, labels, stats, centroids, 4);
 
     std::vector<cv::RotatedRect> det;
     std::vector<int> mapper;
@@ -334,13 +348,13 @@ int main(int argc, const char *argv[])
             print_tensor_dims(" score_text ", score_text);
             print_tensor_dims(" score_link ", score_link);
 
-            display_2d_tensor_heatmap(score_text);
-            display_2d_tensor_heatmap(score_link);
+            display_2d_tensor_heatmap("main score_text", score_text);
+            display_2d_tensor_heatmap("main score_link", score_link);
 
             // Set parameters for the function
             float text_threshold = 0.7;
             float link_threshold = 0.4;
-            float low_text = 0.1;
+            float low_text = 0.4;
             bool estimate_num_chars = false;
             auto result = get_detected_boxes(score_text, score_link, text_threshold, link_threshold, low_text, estimate_num_chars);
 
