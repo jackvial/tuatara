@@ -277,9 +277,7 @@ std::vector<cv::RotatedRect> adjust_result_coordinates(const std::vector<cv::Rot
             corners[i].y *= (ratio_h * ratio_net);
         }
 
-        // cv::RotatedRect adjusted_rect(cv::Point2f(0, 0), cv::Size2f(0, 0), 0);
         cv::RotatedRect adjusted_rect = cv::minAreaRect(std::vector<cv::Point2f>(corners, corners + 4));
-        // adjusted_rect.points(corners);
         adjusted_polys.push_back(adjusted_rect);
     }
 
