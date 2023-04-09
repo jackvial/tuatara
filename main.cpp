@@ -10,53 +10,109 @@
 
 using namespace torch::indexing;
 
-// int parseq()
-// {
-//     std::string model_path = "/Users/jackvial/Code/CPlusPlus/torchscript_example/parseq-tiny/torchscript_model.bin";
+class Tokenizer
+{
+public:
+    const char BOS = '[';
+    const char EOS = ']';
+    const char PAD = 'P';
 
-//     // Deserialize the TorchScript module from a file
-//     torch::jit::script::Module module;
-//     try
-//     {
-//         module = torch::jit::load(model_path);
-//     }
-//     catch (const c10::Error &e)
-//     {
-//         std::cerr << "error loading the model\n";
-//         return -1;
-//     }
+    Tokenizer()
+    {
+        const std::string charset = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!\"#$%&\\'()*+,-./:;<=>?@[\\]^_`{|}~";
 
-//     std::cout << "model loaded\n";
+        itos = charset;
+        itos.insert(itos.begin(), EOS);
+        itos.push_back(BOS);
+        itos.push_back(PAD);
 
-//     std::string image_path = "/Users/jackvial/Code/CPlusPlus/torchscript_example/images/art-01107.jpg";
-//     cv::Mat image = cv::imread(image_path, cv::IMREAD_COLOR);
-//     if (image.empty())
-//     {
-//         std::cerr << "Error reading image from file\n";
-//         return -1;
-//     }
+        for (size_t i = 0; i < itos.size(); ++i)
+        {
+            stoi[itos[i]] = i;
+        }
 
-//     cv::resize(image, image, cv::Size(128, 32));
-//     cv::cvtColor(image, image, cv::COLOR_BGR2RGB);
+        eos_id = stoi[EOS];
+        bos_id = stoi[BOS];
+        pad_id = stoi[PAD];
+    }
 
-//     torch::Tensor image_tensor = torch::from_blob(
-//         image.data, {1, image.rows, image.cols, 3}, torch::kByte);
+    /**
+     * Decode a batch of token distributions.
+     *
+     * Args:
+     *   token_dists: softmax probabilities over the token distribution. Shape: N, L, C
+     *   raw: return unprocessed labels (will return list of list of strings)
+     *
+     * Returns:
+     *   A list of string labels (arbitrary length) and
+     *   their corresponding sequence probabilities as a list of vectors.
+     */
+    std::vector<std::string> decode(const torch::Tensor &token_dists, bool raw = false)
+    {
+        std::vector<std::string> batch_tokens;
+        for (int64_t i = 0; i < token_dists.size(0); ++i)
+        {
+            auto dist = token_dists[i];
+            auto max_dist_result = max_dist(dist);
+            torch::Tensor probs = std::get<0>(max_dist_result);
+            torch::Tensor ids = std::get<1>(max_dist_result);
 
-//     image_tensor = image_tensor.permute({0, 3, 1, 2}); // Rearrange dimensions to {1, 3, 32, 128}
-//     image_tensor = image_tensor.to(torch::kFloat);
-//     image_tensor = image_tensor.div(255.0); // Normalize pixel values (0-255 -> 0-1)
+            if (!raw)
+            {
+                std::tie(probs, ids) = filter(probs, ids);
+            }
 
-//     // Create a vector of inputs
-//     std::vector<torch::jit::IValue> inputs;
-//     // inputs.push_back(torch::ones({1, 3, 32, 128}));
-//     inputs.push_back(image_tensor);
+            std::vector<size_t> id_vector(ids.data_ptr<int64_t>(), ids.data_ptr<int64_t>() + ids.numel());
+            std::string tokens = ids2tok(id_vector, !raw);
+            batch_tokens.push_back(tokens);
+        }
+        return batch_tokens;
+    }
 
-//     // Execute the model and turn its output into a tensor
-//     at::Tensor output = module.forward(inputs).toTensor();
-//     std::cout << "output: " << output << std::endl;
+private:
+    std::string itos;
+    std::map<char, size_t> stoi;
+    size_t eos_id, bos_id, pad_id;
 
-//     return 0;
-// }
+    std::vector<size_t> tok2ids(const std::string &tokens)
+    {
+        std::vector<size_t> ids;
+        for (char s : tokens)
+        {
+            ids.push_back(stoi[s]);
+        }
+        return ids;
+    }
+
+    std::string ids2tok(const std::vector<size_t> &token_ids, bool join = true)
+    {
+        std::string tokens;
+        for (size_t id : token_ids)
+        {
+            tokens.push_back(itos[id]);
+        }
+        return tokens;
+    }
+
+    std::pair<torch::Tensor, torch::Tensor> max_dist(const torch::Tensor &dist)
+    {
+        torch::Tensor probs, ids;
+        std::tie(probs, ids) = dist.max(-1);
+
+        return std::make_pair(probs, ids);
+    }
+
+    std::tuple<torch::Tensor, torch::Tensor> filter(const torch::Tensor &probs, const torch::Tensor &ids)
+    {
+        torch::Tensor filtered_probs, filtered_ids;
+        auto eos_mask = (ids != c10::Scalar(static_cast<int64_t>(eos_id)));
+
+        filtered_probs = probs.masked_select(eos_mask);
+        filtered_ids = ids.masked_select(eos_mask);
+
+        return std::make_tuple(filtered_probs, filtered_ids);
+    }
+};
 
 std::pair<std::vector<cv::RotatedRect>, cv::Mat> get_detected_boxes(
     torch::Tensor textmap, torch::Tensor linkmap, float text_threshold,
@@ -396,6 +452,7 @@ int main(int argc, const char *argv[])
 
             std::cout << "parseq model loaded\n";
 
+            // @TODO - Change this to build batches to feed into the parseq model instead of doing them one at a time
             for (auto &text_region : text_regions)
             {
                 cv::Mat parseq_image_input;
@@ -416,7 +473,25 @@ int main(int argc, const char *argv[])
 
                 // Execute the model and turn its output into a tensor
                 at::Tensor parseq_output = parseq_model.forward(parseq_inputs).toTensor();
-                print_tensor_dims(" parseq_output ", parseq_output);
+                // print_tensor_dims(" parseq_output ", parseq_output);
+
+                auto pred = torch::softmax(parseq_output, -1);
+
+                Tokenizer tokenizer;
+                std::vector<std::string> token_batches = tokenizer.decode(pred, false);
+
+                for (const auto &token_batch : token_batches)
+                {
+                    for (const auto &token : token_batch)
+                    {
+                        if (token == tokenizer.EOS)
+                        {
+                            break;
+                        }
+                        std::cout << token;
+                    }
+                    std::cout << std::endl;
+                }
             }
         }
     }
