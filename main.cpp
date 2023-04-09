@@ -469,11 +469,14 @@ int main(int argc, const char *argv[])
 
             std::cout << "parseq model loaded\n";
 
+            std::vector<std::pair<std::string, cv::RotatedRect>> predicted_text_bbox_pairs;
             std::vector<std::vector<std::pair<cv::RotatedRect, cv::Mat>>> batches = make_recognizer_model_batches(text_regions, 8);
-            for (const auto &batch : batches)
+            std::size_t n_parseq_batches = batches.size();
+            std::size_t parseq_batch_offset = 0;
+            for (int64_t parseq_batch_index = 0; parseq_batch_index < n_parseq_batches; ++parseq_batch_index)
             {
                 std::vector<torch::Tensor> parseq_batch;
-                for (auto &text_region : batch)
+                for (auto &text_region : batches[parseq_batch_index])
                 {
                     cv::Mat parseq_image_input;
                     cv::resize(text_region.second, parseq_image_input, cv::Size(128, 32));
@@ -485,6 +488,7 @@ int main(int argc, const char *argv[])
                     parseq_image_tensor = parseq_image_tensor.to(torch::kFloat);
                     parseq_image_tensor = parseq_image_tensor.div(255.0); // Normalize pixel values (0-255 -> 0-1)
                     parseq_batch.push_back(parseq_image_tensor);
+                    predicted_text_bbox_pairs.push_back(std::make_pair("test", text_region.first)); // Set placeholder text
                 }
 
                 // This is the list of arguments to the model forward pass e.g. model.forward(x, y)
@@ -493,28 +497,56 @@ int main(int argc, const char *argv[])
                 std::vector<torch::jit::IValue> parseq_inputs;
                 torch::Tensor concat_batch = torch::cat(parseq_batch, 0);
 
-                print_tensor_dims("concat_batch", concat_batch);
                 parseq_inputs.push_back(concat_batch);
                 at::Tensor parseq_output = parseq_model.forward(parseq_inputs).toTensor();
 
-                auto pred = torch::softmax(parseq_output, -1);
+                auto parseq_pred = torch::softmax(parseq_output, -1);
 
                 Tokenizer tokenizer;
-                std::vector<std::string> token_batches = tokenizer.decode(pred, false);
-
-                for (const auto &token_batch : token_batches)
+                std::vector<std::string> token_batch = tokenizer.decode(parseq_pred, false);
+                std::size_t token_batch_size = token_batch.size();
+                for (int64_t token_item_index = 0; token_item_index < token_batch_size; ++token_item_index)
                 {
-                    for (const auto &token : token_batch)
+                    std::string predicted_text;
+                    for (const auto &token_char : token_batch[token_item_index])
                     {
-                        if (token == tokenizer.EOS)
+                        if (token_char == tokenizer.EOS)
                         {
                             break;
                         }
-                        std::cout << token;
+                        predicted_text.push_back(token_char);
                     }
-                    std::cout << std::endl;
+
+                    predicted_text_bbox_pairs[parseq_batch_offset + token_item_index].first = predicted_text;
                 }
+                parseq_batch_offset += token_batch_size;
             }
+
+            std::size_t n_predicted_pairs = predicted_text_bbox_pairs.size();
+            for (int64_t pred_pair_index = 0; pred_pair_index < n_predicted_pairs; ++pred_pair_index)
+            {
+                // Draw the detected boxes on the image
+                cv::Point2f corners[4];
+                predicted_text_bbox_pairs[pred_pair_index].second.points(corners);
+                std::vector<cv::Point> corners_vec(corners, corners + 4);
+                cv::polylines(image, corners_vec, true, cv::Scalar(0, 255, 0), 2);
+
+                // Draw the text inside the bounding box
+                const std::string &predicted_text = predicted_text_bbox_pairs[pred_pair_index].first;
+                cv::Point text_origin(corners[0].x, corners[0].y); // You can adjust the position as needed
+                int font_face = cv::FONT_HERSHEY_SIMPLEX;
+                double font_scale = 0.5;
+                int font_thickness = 2;
+                cv::Scalar text_color(0, 0, 255); // BGR color: red
+                cv::putText(image, predicted_text, text_origin, font_face, font_scale, text_color, font_thickness);
+            }
+
+            // Display the image with the drawn boxes
+            cv::namedWindow("Results", cv::WINDOW_NORMAL);
+            cv::imshow("Results", image);
+            cv::waitKey(0);
+
+            // TODO - Save final result as JSON
         }
     }
     else
