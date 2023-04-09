@@ -389,7 +389,7 @@ int main(int argc, const char *argv[])
 
     cv::cvtColor(image, image, cv::COLOR_BGR2RGB);
 
-    float canvas_size = 2560;
+    float canvas_size = 1024; // This has a big effect on memory and ability to detect boxes
     float mag_ratio = 1.0;
 
     cv::Mat image_resized;
@@ -486,7 +486,7 @@ int main(int argc, const char *argv[])
         std::cout << "parseq model loaded\n";
 
         std::vector<std::pair<std::string, cv::RotatedRect>> predicted_text_bbox_pairs;
-        std::vector<std::vector<std::pair<cv::RotatedRect, cv::Mat>>> batches = make_recognizer_model_batches(text_regions, 8);
+        std::vector<std::vector<std::pair<cv::RotatedRect, cv::Mat>>> batches = make_recognizer_model_batches(text_regions, 4);
         std::size_t n_parseq_batches = batches.size();
         std::size_t parseq_batch_offset = 0;
         for (int64_t parseq_batch_index = 0; parseq_batch_index < n_parseq_batches; ++parseq_batch_index)
