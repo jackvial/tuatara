@@ -173,20 +173,6 @@ std::pair<std::vector<cv::RotatedRect>, cv::Mat> get_detected_boxes(
     return std::make_pair(det, labels);
 }
 
-cv::Mat normalize_mean_variance(
-    const cv::Mat &in_img,
-    const cv::Scalar &mean = cv::Scalar(0.485, 0.456, 0.406),
-    const cv::Scalar &variance = cv::Scalar(0.229, 0.224, 0.225))
-{
-    cv::Mat img = in_img.clone();
-    img.convertTo(img, CV_32FC3);
-
-    img -= mean * 255.0;
-    img /= variance * 255.0;
-
-    return img;
-}
-
 std::tuple<cv::Mat, float, cv::Size> resize_aspect_ratio(
     const cv::Mat &img, int square_size, int interpolation, float mag_ratio = 1)
 {
@@ -290,8 +276,6 @@ int main(int argc, const char *argv[])
     float ratio_h = 1 / target_ratio;
     float ratio_w = 1 / target_ratio;
 
-    // cv::Mat image_normalized = normalize_mean_variance(image);
-
     torch::Tensor image_tensor = torch::from_blob(
         image_resized.data, {1, image_resized.rows, image_resized.cols, 3}, torch::kByte);
 
@@ -334,8 +318,8 @@ int main(int argc, const char *argv[])
             print_tensor_dims(" score_text ", score_text);
             print_tensor_dims(" score_link ", score_link);
 
-            display_2d_tensor_heatmap("main score_text", score_text);
-            display_2d_tensor_heatmap("main score_link", score_link);
+            // display_2d_tensor_heatmap("main score_text", score_text);
+            // display_2d_tensor_heatmap("main score_link", score_link);
 
             // Set parameters for the function
             float text_threshold = 0.7;
@@ -348,86 +332,92 @@ int main(int argc, const char *argv[])
             auto det = result.first;
             auto labels = result.second;
 
-            std::cout << "Box before adjustment: " << det.size() << std::endl;
-            for (const auto &box : det)
-            {
-                cv::Point2f corners[4];
-                box.points(corners);
-                std::cout << "Box BA: ";
-                for (int i = 0; i < 4; ++i)
-                {
-                    std::cout << "(" << corners[i].x << ", " << corners[i].y << ") ";
-                }
-                std::cout << std::endl;
-            }
+            // std::cout << "Box before adjustment: " << det.size() << std::endl;
+            // for (const auto &box : det)
+            // {
+            //     cv::Point2f corners[4];
+            //     box.points(corners);
+            //     std::cout << "Box BA: ";
+            //     for (int i = 0; i < 4; ++i)
+            //     {
+            //         std::cout << "(" << corners[i].x << ", " << corners[i].y << ") ";
+            //     }
+            //     std::cout << std::endl;
+            // }
 
+            // Scale bounding boxes to the input image * ratio
             auto boxes = adjust_result_coordinates(det, ratio_w, ratio_h);
 
-            // Print results
-            std::cout << "Box after adjustment: " << boxes.size() << std::endl;
-            for (const auto &box : boxes)
-            {
-                cv::Point2f corners[4];
-                box.points(corners);
-                std::cout << "Box AA: ";
-                for (int i = 0; i < 4; ++i)
-                {
-                    std::cout << "(" << corners[i].x << ", " << corners[i].y << ") ";
-                }
-                std::cout << std::endl;
-            }
-
-            // draw_bounding_boxes_on_background(boxes);
-
-            // @TODO - need to scale detected bounding boxes back to original input image size
-            // using adjust_result_coordinates
-
             // Draw the detected boxes on the image
-            for (const auto &box : boxes)
-            {
-                cv::Point2f corners[4];
-                box.points(corners);
-                std::vector<cv::Point> corners_vec(corners, corners + 4);
-                cv::polylines(image, corners_vec, true, cv::Scalar(0, 255, 0), 2);
-            }
+            // for (const cv::RotatedRect &box : boxes)
+            // {
+            //     cv::Point2f corners[4];
+            //     box.points(corners);
+            //     std::vector<cv::Point> corners_vec(corners, corners + 4);
+            //     cv::polylines(image, corners_vec, true, cv::Scalar(0, 255, 0), 2);
+            // }
 
-            // Display the image with the drawn boxes
-            cv::namedWindow("Detected Boxes", cv::WINDOW_NORMAL);
-            cv::imshow("Detected Boxes", image);
-            cv::waitKey(0);
+            // // Display the image with the drawn boxes
+            // cv::namedWindow("Detected Boxes", cv::WINDOW_NORMAL);
+            // cv::imshow("Detected Boxes", image);
+            // cv::waitKey(0);
 
             // Create a vector to store the cropped images
-            std::vector<cv::Mat> cropped_images;
+            cv::Mat all_cropped_images = cv::Mat::zeros(image.size(), image.type());
+            std::vector<std::pair<cv::RotatedRect, cv::Mat>> text_regions;
             for (const cv::RotatedRect &box : boxes)
             {
-                // Get the bounding rectangle of the rotated box
-                cv::Rect bounding_rect = box.boundingRect();
-
                 // Crop the rotated image using the bounding rectangle
-                cv::Mat cropped_image = image(bounding_rect);
-                cropped_images.push_back(cropped_image);
+                // TODO - probably want to group the boxes horizontal if they are within some distance of each other
+                // this will probably give better results for the transformer model reading the text as there will be
+                // more context to infer the letters from. It will also mean less forward passes through the model.
+                cv::Mat cropped_image = image(box.boundingRect());
+                cropped_image.copyTo(all_cropped_images(box.boundingRect()));
+                text_regions.push_back(std::make_pair(box, cropped_image));
             }
 
-            // Create a black image to place the cropped images
-            int max_height = 0;
-            int total_width = 0;
-
-            for (const cv::Mat &cropped_image : cropped_images)
-            {
-                max_height = std::max(max_height, cropped_image.rows);
-                total_width += cropped_image.cols;
-            }
-
-            cv::Mat all_cropped_images = cv::Mat::zeros(image.size(), image.type());
-
-            // Place the cropped images onto the black background
-            for (size_t i = 0; i < cropped_images.size(); i++)
-            {
-                cv::Rect bounding_rect = boxes[i].boundingRect();
-                cropped_images[i].copyTo(all_cropped_images(bounding_rect));
-            }
             // Save all_cropped_images
             cv::imwrite("/Users/jackvial/Code/CPlusPlus/torchscript_example/outputs/all_cropped_images.jpg", all_cropped_images);
+
+            // ==== Recognition Stage ====
+            std::string parseq_model_path = "/Users/jackvial/Code/CPlusPlus/torchscript_example/parseq-tiny/torchscript_model.bin";
+
+            // Deserialize the TorchScript module from a file
+            torch::jit::script::Module parseq_model;
+            try
+            {
+                parseq_model = torch::jit::load(parseq_model_path);
+            }
+            catch (const c10::Error &e)
+            {
+                std::cerr << "error loading the parseq model\n";
+                return -1;
+            }
+
+            std::cout << "parseq model loaded\n";
+
+            for (auto &text_region : text_regions)
+            {
+                cv::Mat parseq_image_input;
+                cv::resize(text_region.second, parseq_image_input, cv::Size(128, 32));
+                cv::cvtColor(parseq_image_input, parseq_image_input, cv::COLOR_BGR2RGB);
+
+                torch::Tensor parseq_image_tensor = torch::from_blob(
+                    parseq_image_input.data, {1, parseq_image_input.rows, parseq_image_input.cols, 3}, torch::kByte);
+
+                parseq_image_tensor = parseq_image_tensor.permute({0, 3, 1, 2}); // Rearrange dimensions to {1, 3, 32, 128}
+                parseq_image_tensor = parseq_image_tensor.to(torch::kFloat);
+                parseq_image_tensor = parseq_image_tensor.div(255.0); // Normalize pixel values (0-255 -> 0-1)
+
+                // Create a vector of inputs
+                std::vector<torch::jit::IValue> parseq_inputs;
+                // parseq_inputs.push_back(torch::ones({1, 3, 32, 128}));
+                parseq_inputs.push_back(parseq_image_tensor);
+
+                // Execute the model and turn its output into a tensor
+                at::Tensor parseq_output = parseq_model.forward(parseq_inputs).toTensor();
+                print_tensor_dims(" parseq_output ", parseq_output);
+            }
         }
     }
     else
