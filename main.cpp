@@ -321,7 +321,8 @@ int main(int argc, const char *argv[])
 
     std::cout << "model loaded\n";
 
-    std::string image_path = "/Users/jackvial/Code/CPlusPlus/torchscript_example/images/table_english.png";
+    // std::string image_path = "/Users/jackvial/Code/CPlusPlus/torchscript_example/images/table_english.png";
+    std::string image_path = "/Users/jackvial/Code/CPlusPlus/torchscript_example/images/resume_example.png";
     cv::Mat image = cv::imread(image_path, cv::IMREAD_COLOR);
     cv::Mat image_original = cv::imread(image_path, cv::IMREAD_COLOR);
     if (image.empty())
