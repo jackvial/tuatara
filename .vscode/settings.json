@@ -1,7 +1,0 @@
-{
-  "files.associations": {
-    "*.blade.php": "html",
-    "*.scss": "scss",
-    "iosfwd": "cpp"
-  }
-}
