@@ -73,7 +73,6 @@ void display_2d_tensor_heatmap(std::string label, torch::Tensor t)
 
     // Convert the normalized tensor to an OpenCV Mat
     cv::Mat mat(tensor_normalized.size(0), tensor_normalized.size(1), CV_32F, tensor_normalized.data_ptr<float>());
-    // cv::Mat mat(t.size(0), t.size(1), CV_32F, t.data_ptr<float>());
 
     // Convert the normalized Mat to a heatmap
     cv::Mat heatmap;
