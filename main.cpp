@@ -284,6 +284,25 @@ std::vector<cv::RotatedRect> adjust_result_coordinates(const std::vector<cv::Rot
     return adjusted_polys;
 }
 
+std::vector<std::vector<std::pair<cv::RotatedRect, cv::Mat>>> make_recognizer_model_batches(const std::vector<std::pair<cv::RotatedRect, cv::Mat>> &input, int n)
+{
+    std::vector<std::vector<std::pair<cv::RotatedRect, cv::Mat>>> chunks;
+
+    int chunk_size = input.size() / n;
+    int remainder = input.size() % n;
+
+    int start = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        int end = start + chunk_size + (i < remainder ? 1 : 0);
+        std::vector<std::pair<cv::RotatedRect, cv::Mat>> chunk(input.begin() + start, input.begin() + end);
+        chunks.push_back(chunk);
+        start = end;
+    }
+
+    return chunks;
+}
+
 int main(int argc, const char *argv[])
 {
     std::string model_path = "/Users/jackvial/Code/CPlusPlus/torchscript_example/weights/craft_traced_torchscript_model.pt";
@@ -450,28 +469,33 @@ int main(int argc, const char *argv[])
 
             std::cout << "parseq model loaded\n";
 
-            // @TODO - Change this to build batches to feed into the parseq model instead of doing them one at a time
-            for (auto &text_region : text_regions)
+            std::vector<std::vector<std::pair<cv::RotatedRect, cv::Mat>>> batches = make_recognizer_model_batches(text_regions, 8);
+            for (const auto &batch : batches)
             {
-                cv::Mat parseq_image_input;
-                cv::resize(text_region.second, parseq_image_input, cv::Size(128, 32));
-                cv::cvtColor(parseq_image_input, parseq_image_input, cv::COLOR_BGR2RGB);
+                std::vector<torch::Tensor> parseq_batch;
+                for (auto &text_region : batch)
+                {
+                    cv::Mat parseq_image_input;
+                    cv::resize(text_region.second, parseq_image_input, cv::Size(128, 32));
+                    cv::cvtColor(parseq_image_input, parseq_image_input, cv::COLOR_BGR2RGB);
 
-                torch::Tensor parseq_image_tensor = torch::from_blob(
-                    parseq_image_input.data, {1, parseq_image_input.rows, parseq_image_input.cols, 3}, torch::kByte);
+                    torch::Tensor parseq_image_tensor = torch::from_blob(
+                        parseq_image_input.data, {1, parseq_image_input.rows, parseq_image_input.cols, 3}, torch::kByte);
+                    parseq_image_tensor = parseq_image_tensor.permute({0, 3, 1, 2}); // Rearrange dimensions to {1, 3, 32, 128}
+                    parseq_image_tensor = parseq_image_tensor.to(torch::kFloat);
+                    parseq_image_tensor = parseq_image_tensor.div(255.0); // Normalize pixel values (0-255 -> 0-1)
+                    parseq_batch.push_back(parseq_image_tensor);
+                }
 
-                parseq_image_tensor = parseq_image_tensor.permute({0, 3, 1, 2}); // Rearrange dimensions to {1, 3, 32, 128}
-                parseq_image_tensor = parseq_image_tensor.to(torch::kFloat);
-                parseq_image_tensor = parseq_image_tensor.div(255.0); // Normalize pixel values (0-255 -> 0-1)
-
-                // Create a vector of inputs
+                // This is the list of arguments to the model forward pass e.g. model.forward(x, y)
+                // in most cases this will only be a list of length 1 e.g. model.forward(x)
+                // Don't confuse it with the batches.
                 std::vector<torch::jit::IValue> parseq_inputs;
-                // parseq_inputs.push_back(torch::ones({1, 3, 32, 128}));
-                parseq_inputs.push_back(parseq_image_tensor);
+                torch::Tensor concat_batch = torch::cat(parseq_batch, 0);
 
-                // Execute the model and turn its output into a tensor
+                print_tensor_dims("concat_batch", concat_batch);
+                parseq_inputs.push_back(concat_batch);
                 at::Tensor parseq_output = parseq_model.forward(parseq_inputs).toTensor();
-                // print_tensor_dims(" parseq_output ", parseq_output);
 
                 auto pred = torch::softmax(parseq_output, -1);
 
