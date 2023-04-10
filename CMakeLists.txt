@@ -1,29 +1,5 @@
-# cmake_minimum_required(VERSION 3.0 FATAL_ERROR)
-# project(torchscript_example)
-
-# list(APPEND CMAKE_PREFIX_PATH "libtorch/share/cmake")
-
-# find_package(Torch REQUIRED)
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
-
-# # Find OpenCV
-# find_package(OpenCV REQUIRED)
-
-# add_executable(torchscript_example main.cpp)
-
-# # Link libraries
-# target_link_libraries(torchscript_example "${TORCH_LIBRARIES} ${OpenCV_LIBS}")
-
-# # Include directories
-# target_include_directories(${PROJECT_NAME} PRIVATE ${OpenCV_INCLUDE_DIRS})
-
-# set_property(TARGET torchscript_example PROPERTY CXX_STANDARD 14)
-
-
-
-
 cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
-project(opencv_torch_example)
+project(tuatara)
 
 # # Set C++ standard
 set(CMAKE_CXX_STANDARD 14)
