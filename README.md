@@ -6,5 +6,5 @@
 ```
 cd build
 cmake --build .
-./torchscript_example ../parseq-tiny/torchscript_model.bin
+./tuatara ../parseq-tiny/torchscript_model.bin
 ```
