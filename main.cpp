@@ -6,6 +6,7 @@
 #include <cmath>
 #include <utility>
 #include <torch/script.h>
+#include <torch/version.h>
 #include <opencv2/opencv.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include "utils.h"
@@ -359,8 +360,18 @@ void save_to_file(const std::string &filename, const std::string &content)
     }
 }
 
+std::string get_file_name_from_path(const std::string &image_path)
+{
+    std::size_t start = image_path.find_last_of('/') + 1;
+    std::size_t end = image_path.find_last_of('.');
+    return image_path.substr(start, end - start);
+}
+
 int main(int argc, const char *argv[])
 {
+    std::cout << "LibTorch version: " << TORCH_VERSION << std::endl;
+    std::cout << "OpenCV version: " << CV_VERSION << std::endl;
+
     std::string model_path = "../weights/craft_traced_torchscript_model.pt";
 
     // Deserialize the TorchScript module from a file
@@ -378,6 +389,7 @@ int main(int argc, const char *argv[])
     std::cout << "craft model loaded\n";
 
     std::string image_path = "../images/resume_example.png";
+    std::string image_file_name = get_file_name_from_path(image_path);
     cv::Mat image = cv::imread(image_path, cv::IMREAD_COLOR);
     cv::Mat image_original = cv::imread(image_path, cv::IMREAD_COLOR);
     if (image.empty())
@@ -465,10 +477,11 @@ int main(int argc, const char *argv[])
         }
 
         // Save all_cropped_images
-        cv::imwrite("../outputs/all_cropped_images.jpg", all_cropped_images);
+        cv::imwrite("../outputs/" + image_file_name + "_detector_crops.jpg", all_cropped_images);
 
         // ==== Recognition Stage ====
         std::string parseq_model_path = "../weights/parseq_torchscript.bin";
+        // std::string parseq_model_path = "../weights/parseq_int8_torchscript.pt";
 
         // Deserialize the TorchScript module from a file
         torch::jit::script::Module parseq_model;
@@ -503,7 +516,7 @@ int main(int argc, const char *argv[])
                 parseq_image_tensor = parseq_image_tensor.to(torch::kFloat);
                 parseq_image_tensor = parseq_image_tensor.div(255.0); // Normalize pixel values (0-255 -> 0-1)
                 parseq_batch.push_back(parseq_image_tensor);
-                predicted_text_bbox_pairs.push_back(std::make_pair("test", text_region.first)); // Set placeholder text
+                predicted_text_bbox_pairs.push_back(std::make_pair("", text_region.first)); // Set placeholder text
             }
 
             // This is the list of arguments to the model forward pass e.g. model.forward(x, y)
@@ -562,7 +575,7 @@ int main(int argc, const char *argv[])
         cv::waitKey(0);
 
         std::string json_str = to_json(predicted_text_bbox_pairs);
-        save_to_file("../outputs/ocr_outputs.json", json_str);
+        save_to_file("../outputs/" + image_file_name + "_results.json", json_str);
     }
 
     return 0;
