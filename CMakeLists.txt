@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find LibTorch
-set(Torch_DIR "/Users/jackvial/Code/CPlusPlus/torchscript_example/libtorch/share/cmake/Torch")
+set(Torch_DIR "/Users/jackvial/Code/CPlusPlus/tuatara/libtorch/share/cmake/Torch")
 find_package(Torch REQUIRED)
 
 # Find OpenCV

@@ -361,7 +361,7 @@ void save_to_file(const std::string &filename, const std::string &content)
 
 int main(int argc, const char *argv[])
 {
-    std::string model_path = "/Users/jackvial/Code/CPlusPlus/torchscript_example/weights/craft_traced_torchscript_model.pt";
+    std::string model_path = "../weights/craft_traced_torchscript_model.pt";
 
     // Deserialize the TorchScript module from a file
     torch::jit::script::Module module;
@@ -377,8 +377,7 @@ int main(int argc, const char *argv[])
 
     std::cout << "craft model loaded\n";
 
-    // std::string image_path = "/Users/jackvial/Code/CPlusPlus/torchscript_example/images/table_english.png";
-    std::string image_path = "/Users/jackvial/Code/CPlusPlus/torchscript_example/images/resume_example.png";
+    std::string image_path = "../images/resume_example.png";
     cv::Mat image = cv::imread(image_path, cv::IMREAD_COLOR);
     cv::Mat image_original = cv::imread(image_path, cv::IMREAD_COLOR);
     if (image.empty())
@@ -466,10 +465,10 @@ int main(int argc, const char *argv[])
         }
 
         // Save all_cropped_images
-        cv::imwrite("/Users/jackvial/Code/CPlusPlus/torchscript_example/outputs/all_cropped_images.jpg", all_cropped_images);
+        cv::imwrite("../outputs/all_cropped_images.jpg", all_cropped_images);
 
         // ==== Recognition Stage ====
-        std::string parseq_model_path = "/Users/jackvial/Code/CPlusPlus/torchscript_example/parseq-tiny/torchscript_model.bin";
+        std::string parseq_model_path = "../weights/parseq_torchscript.bin";
 
         // Deserialize the TorchScript module from a file
         torch::jit::script::Module parseq_model;
@@ -563,7 +562,7 @@ int main(int argc, const char *argv[])
         cv::waitKey(0);
 
         std::string json_str = to_json(predicted_text_bbox_pairs);
-        save_to_file("/Users/jackvial/Code/CPlusPlus/torchscript_example/outputs/output.json", json_str);
+        save_to_file("../outputs/ocr_outputs.json", json_str);
     }
 
     return 0;
