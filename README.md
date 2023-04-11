@@ -5,6 +5,7 @@
 # How To Run
 ```
 cd build
+cmake ..
 cmake --build .
-./tuatara ../parseq-tiny/torchscript_model.bin
+./tuatara
 ```
