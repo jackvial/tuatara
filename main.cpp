@@ -10,6 +10,7 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include "utils.h"
+#include <chrono>
 
 using namespace torch::indexing;
 
@@ -372,6 +373,8 @@ int main(int argc, const char *argv[])
     std::cout << "LibTorch version: " << TORCH_VERSION << std::endl;
     std::cout << "OpenCV version: " << CV_VERSION << std::endl;
 
+    auto start_time = std::chrono::high_resolution_clock::now();
+
     std::string model_path = "../weights/craft_traced_torchscript_model.pt";
 
     // Deserialize the TorchScript module from a file
@@ -388,7 +391,7 @@ int main(int argc, const char *argv[])
 
     std::cout << "craft model loaded\n";
 
-    std::string image_path = "../images/resume_example.png";
+    std::string image_path = "../images/table_english.png";
     std::string image_file_name = get_file_name_from_path(image_path);
     cv::Mat image = cv::imread(image_path, cv::IMREAD_COLOR);
     cv::Mat image_original = cv::imread(image_path, cv::IMREAD_COLOR);
@@ -480,8 +483,8 @@ int main(int argc, const char *argv[])
         cv::imwrite("../outputs/" + image_file_name + "_detector_crops.jpg", all_cropped_images);
 
         // ==== Recognition Stage ====
-        std::string parseq_model_path = "../weights/parseq_torchscript.bin";
-        // std::string parseq_model_path = "../weights/parseq_int8_torchscript.pt";
+        // std::string parseq_model_path = "../weights/parseq_torchscript.bin";
+        std::string parseq_model_path = "../weights/parseq_int8_torchscript.pt";
 
         // Deserialize the TorchScript module from a file
         torch::jit::script::Module parseq_model;
@@ -526,10 +529,13 @@ int main(int argc, const char *argv[])
             torch::Tensor concat_batch = torch::cat(parseq_batch, 0);
 
             parseq_inputs.push_back(concat_batch);
+
+            std::cout << " Running parseq forward pass..." << std::endl;
             at::Tensor parseq_output = parseq_model.forward(parseq_inputs).toTensor();
 
             auto parseq_pred = torch::softmax(parseq_output, -1);
 
+            std::cout << "Running tokenizer..." << std::endl;
             Tokenizer tokenizer;
             std::vector<std::string> token_batch = tokenizer.decode(parseq_pred, false);
             std::size_t token_batch_size = token_batch.size();
@@ -549,6 +555,10 @@ int main(int argc, const char *argv[])
             }
             parseq_batch_offset += token_batch_size;
         }
+
+        auto end_time = std::chrono::high_resolution_clock::now();
+        auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+        std::cout << "Elapsed time: " << (elapsed_time * 0.001) << " seconds " << std::endl;
 
         std::size_t n_predicted_pairs = predicted_text_bbox_pairs.size();
         for (int64_t pred_pair_index = 0; pred_pair_index < n_predicted_pairs; ++pred_pair_index)

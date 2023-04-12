@@ -11,6 +11,14 @@
       "program": "${workspaceFolder}/build/opencv_torch_example",
       "args": [],
       "cwd": "${workspaceFolder}"
+    },
+    {
+        "name": "Python Parseq Debug",
+        "type": "python",
+        "request": "launch",
+        "program": "${workspaceFolder}/quants/parseq.py",
+        "console": "integratedTerminal",
+        "python": "${workspaceFolder}/quants/quants_env/bin/python3.11"
     }
   ]
 }
