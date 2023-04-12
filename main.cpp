@@ -370,6 +370,9 @@ std::string get_file_name_from_path(const std::string &image_path)
 
 int main(int argc, const char *argv[])
 {
+    // Disable gradient calculation
+    // This reduces memory usage by ~10x
+    torch::NoGradGuard no_grad;
     std::cout << "LibTorch version: " << TORCH_VERSION << std::endl;
     std::cout << "OpenCV version: " << CV_VERSION << std::endl;
 
@@ -483,8 +486,8 @@ int main(int argc, const char *argv[])
         cv::imwrite("../outputs/" + image_file_name + "_detector_crops.jpg", all_cropped_images);
 
         // ==== Recognition Stage ====
-        // std::string parseq_model_path = "../weights/parseq_torchscript.bin";
-        std::string parseq_model_path = "../weights/parseq_int8_torchscript.pt";
+        std::string parseq_model_path = "../weights/parseq_torchscript.bin";
+        //std::string parseq_model_path = "../weights/parseq_int8_torchscript.pt";
 
         // Deserialize the TorchScript module from a file
         torch::jit::script::Module parseq_model;
