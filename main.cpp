@@ -394,7 +394,7 @@ int main(int argc, const char *argv[])
 
     std::cout << "craft model loaded\n";
 
-    std::string image_path = "../images/table_english.png";
+    std::string image_path = "../images/resume_example.png";
     std::string image_file_name = get_file_name_from_path(image_path);
     cv::Mat image = cv::imread(image_path, cv::IMREAD_COLOR);
     cv::Mat image_original = cv::imread(image_path, cv::IMREAD_COLOR);
@@ -438,12 +438,11 @@ int main(int argc, const char *argv[])
     }
 
     auto output_tuple = output_ivalue.toTuple();
-
-    // Access elements in the tuple using std::get
+    
     torch::Tensor output_tensor_1 = output_tuple->elements()[0].toTensor();
     torch::Tensor output_tensor_2 = output_tuple->elements()[1].toTensor();
 
-    // Get the size of the batch dimension
+    std::cout << "post processing craft predictions..." << std::endl;
     int64_t batch_size = output_tensor_1.size(0);
 
     // Iterate through the batch dimension
@@ -486,6 +485,8 @@ int main(int argc, const char *argv[])
         cv::imwrite("../outputs/" + image_file_name + "_detector_crops.jpg", all_cropped_images);
 
         // ==== Recognition Stage ====
+        std::cout << "loading parseq model..." << std::endl;
+        
         std::string parseq_model_path = "../weights/parseq_torchscript.bin";
         //std::string parseq_model_path = "../weights/parseq_int8_torchscript.pt";
 
