@@ -7,18 +7,23 @@
     {
       "type": "lldb",
       "request": "launch",
-      "name": "Debug",
-      "program": "${workspaceFolder}/build/opencv_torch_example",
-      "args": [],
+      "name": "Debug Resume Example",
+      "program": "${workspaceFolder}/build/examples/resume",
+      "args": [
+        "${workspaceFolder}/images/resume_example.png",
+        "${workspaceFolder}/weights/",
+        "${workspaceFolder}/outputs/",
+        "false"
+      ],
       "cwd": "${workspaceFolder}"
     },
     {
-        "name": "Python Parseq Debug",
-        "type": "python",
-        "request": "launch",
-        "program": "${workspaceFolder}/quants/parseq.py",
-        "console": "integratedTerminal",
-        "python": "${workspaceFolder}/quants/quants_env/bin/python3.11"
+      "name": "Python Parseq Debug",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/quants/parseq.py",
+      "console": "integratedTerminal",
+      "python": "${workspaceFolder}/quants/quants_env/bin/python3.11"
     }
   ]
 }

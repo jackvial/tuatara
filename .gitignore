@@ -3,3 +3,5 @@ build
 libtorch
 weights
 outputs
+build_debug
+build_release

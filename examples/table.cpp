@@ -5,7 +5,8 @@ int main(int argc, const char** argv) {
     run_ocr(
         "../../images/table_english.png",
         "../../weights",
-        "../../outputs"
+        "../../outputs",
+        false
     );
     return 0;
 }
