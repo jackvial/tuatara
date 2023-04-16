@@ -368,7 +368,11 @@ std::string get_file_name_from_path(const std::string &image_path)
     return image_path.substr(start, end - start);
 }
 
-int main(int argc, const char *argv[])
+int run_ocr(
+    std::string image_path = "../../images/resume_example.png",
+    std::string weights_dir = "../../weights",
+    std::string outputs_dir = "../../outputs"
+)
 {
     // Disable gradient calculation
     // This reduces memory usage by ~10x
@@ -378,7 +382,7 @@ int main(int argc, const char *argv[])
 
     auto start_time = std::chrono::high_resolution_clock::now();
 
-    std::string model_path = "../weights/craft_traced_torchscript_model.pt";
+    std::string model_path = weights_dir + "/craft_traced_torchscript_model.pt";
 
     // Deserialize the TorchScript module from a file
     torch::jit::script::Module module;
@@ -394,7 +398,7 @@ int main(int argc, const char *argv[])
 
     std::cout << "craft model loaded\n";
 
-    std::string image_path = "../images/resume_example.png";
+    // std::string image_path = "../images/resume_example.png";
     std::string image_file_name = get_file_name_from_path(image_path);
     cv::Mat image = cv::imread(image_path, cv::IMREAD_COLOR);
     cv::Mat image_original = cv::imread(image_path, cv::IMREAD_COLOR);
@@ -438,7 +442,7 @@ int main(int argc, const char *argv[])
     }
 
     auto output_tuple = output_ivalue.toTuple();
-    
+
     torch::Tensor output_tensor_1 = output_tuple->elements()[0].toTensor();
     torch::Tensor output_tensor_2 = output_tuple->elements()[1].toTensor();
 
@@ -482,13 +486,13 @@ int main(int argc, const char *argv[])
         }
 
         // Save all_cropped_images
-        cv::imwrite("../outputs/" + image_file_name + "_detector_crops.jpg", all_cropped_images);
+        cv::imwrite(outputs_dir + "/" + image_file_name + "_detector_crops.jpg", all_cropped_images);
 
         // ==== Recognition Stage ====
         std::cout << "loading parseq model..." << std::endl;
-        
-        std::string parseq_model_path = "../weights/parseq_torchscript.bin";
-        //std::string parseq_model_path = "../weights/parseq_int8_torchscript.pt";
+
+        std::string parseq_model_path = weights_dir + "/parseq_torchscript.bin";
+        // std::string parseq_model_path = "../weights/parseq_int8_torchscript.pt";
 
         // Deserialize the TorchScript module from a file
         torch::jit::script::Module parseq_model;
@@ -589,7 +593,7 @@ int main(int argc, const char *argv[])
         cv::waitKey(0);
 
         std::string json_str = to_json(predicted_text_bbox_pairs);
-        save_to_file("../outputs/" + image_file_name + "_results.json", json_str);
+        save_to_file(outputs_dir + "/" + image_file_name + "_results.json", json_str);
     }
 
     return 0;

@@ -15,8 +15,19 @@ find_package(Torch REQUIRED)
 find_package(OpenCV 4 REQUIRED)
 
 # Create executable
-set(SOURCES main.cpp utils.cpp)
-add_executable(${PROJECT_NAME} ${SOURCES})
+#set(SOURCES main.cpp utils.cpp)
+#set(SOURCES main.cpp utils.cpp)
+#add_executable(${PROJECT_NAME} ${SOURCES})
+add_library(tuatara STATIC
+    tuatara.cpp
+    utils.cpp
+)
+
+# Make sure to include the header files
+target_include_directories(tuatara PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
 
 # Link libraries
 target_link_libraries(${PROJECT_NAME} ${TORCH_LIBRARIES} ${OpenCV_LIBS})
@@ -24,3 +35,4 @@ target_link_libraries(${PROJECT_NAME} ${TORCH_LIBRARIES} ${OpenCV_LIBS})
 # Include directories
 target_include_directories(${PROJECT_NAME} PRIVATE ${OpenCV_INCLUDE_DIRS})
 
+add_subdirectory(examples)
