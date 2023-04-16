@@ -1,4 +1,4 @@
-#include "../tuatara.h"
+#include "tuatara.h"
 
 // Main file
 int main(int argc, const char** argv) {
