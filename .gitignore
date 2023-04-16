@@ -5,3 +5,4 @@ weights
 outputs
 build_debug
 build_release
+pybind11

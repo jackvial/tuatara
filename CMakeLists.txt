@@ -20,3 +20,5 @@ target_include_directories(tuatara PUBLIC
 target_link_libraries(${PROJECT_NAME} ${TORCH_LIBRARIES} ${OpenCV_LIBS})
 target_include_directories(${PROJECT_NAME} PRIVATE ${OpenCV_INCLUDE_DIRS})
 add_subdirectory(examples)
+
+add_subdirectory(bindings)
