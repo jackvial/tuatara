@@ -13,7 +13,7 @@
         "${workspaceFolder}/images/resume_example.png",
         "${workspaceFolder}/weights/",
         "${workspaceFolder}/outputs/",
-        "false"
+        "0"
       ],
       "cwd": "${workspaceFolder}"
     },

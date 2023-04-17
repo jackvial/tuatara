@@ -6,7 +6,7 @@ int main(int argc, const char** argv) {
         "../../images/table_english.png",
         "../../weights",
         "../../outputs",
-        false
+        "0"
     );
     return 0;
 }
