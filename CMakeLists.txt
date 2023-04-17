@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(Torch_DIR "./libtorch/share/cmake/Torch")
 find_package(Torch REQUIRED)
 find_package(OpenCV 4 REQUIRED)
+find_package(Threads REQUIRED)
 
 add_library(tuatara STATIC
     tuatara.cpp

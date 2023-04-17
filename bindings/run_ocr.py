@@ -9,7 +9,7 @@ def main():
         "../images/resume_example.png",
         "../weights",
         "../outputs",
-        False
+        "0"
     )
 
 

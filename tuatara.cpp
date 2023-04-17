@@ -4,11 +4,14 @@
 #include <chrono>
 #include <cmath>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/opencv.hpp>
 #include <sstream>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -327,6 +330,14 @@ bool parse_string_to_bool(const std::string &str) {
   return result;
 }
 
+void infer(std::shared_ptr<torch::jit::script::Module> model, torch::Tensor input, std::vector<torch::Tensor>& outputs, std::mutex& output_mutex) {
+    torch::NoGradGuard no_grad;
+    torch::Tensor output = model->forward({input}).toTensor();
+
+    std::unique_lock<std::mutex> lock(output_mutex);
+    outputs.push_back(output);
+}
+
 int run_ocr(std::string image_path, std::string weights_dir, std::string outputs_dir, std::string debug_mode) {
   if (image_path.empty()) {
     std::cerr << "Please provide a value for image_path" << std::endl;
@@ -488,6 +499,8 @@ int run_ocr(std::string image_path, std::string weights_dir, std::string outputs
         parseq_batch.push_back(parseq_image_tensor);
         predicted_text_bbox_pairs.push_back(std::make_pair("", text_region.first));  // Set placeholder text
       }
+
+      const int num_threads = 4;
 
       // This is the list of arguments to the model forward pass e.g.
       // model.forward(x, y) in most cases this will only be a list of length 1
