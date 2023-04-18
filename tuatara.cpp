@@ -10,6 +10,7 @@
 #include <mutex>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/opencv.hpp>
+#include <queue>
 #include <sstream>
 #include <thread>
 #include <utility>
@@ -330,12 +331,29 @@ bool parse_string_to_bool(const std::string &str) {
   return result;
 }
 
-void infer(std::shared_ptr<torch::jit::script::Module> model, torch::Tensor input, std::vector<torch::Tensor>& outputs, std::mutex& output_mutex) {
-    torch::NoGradGuard no_grad;
-    torch::Tensor output = model->forward({input}).toTensor();
+void infer(torch::jit::script::Module& model, std::queue<torch::Tensor> &input_queue, std::vector<torch::Tensor> &outputs, std::mutex &input_mutex, std::mutex &output_mutex) {
+  torch::NoGradGuard no_grad;
+
+  while (true) {
+    input_mutex.lock();
+    if (input_queue.empty()) {
+      input_mutex.unlock();
+      break;
+    }
+
+    // torch::Tensor input = input_queue.front();
+    
+    std::vector<torch::jit::IValue> inputs;
+    inputs.push_back(input_queue.front());
+    
+    input_queue.pop();
+    input_mutex.unlock();
+
+    torch::Tensor output = model.forward(inputs).toTensor();
 
     std::unique_lock<std::mutex> lock(output_mutex);
     outputs.push_back(output);
+  }
 }
 
 int run_ocr(std::string image_path, std::string weights_dir, std::string outputs_dir, std::string debug_mode) {
@@ -481,87 +499,132 @@ int run_ocr(std::string image_path, std::string weights_dir, std::string outputs
 
     std::cout << "parseq model loaded\n";
 
-    std::vector<std::pair<std::string, cv::RotatedRect>> predicted_text_bbox_pairs;
-    std::vector<std::vector<std::pair<cv::RotatedRect, cv::Mat>>> batches = make_recognizer_model_batches(text_regions, 4);
-    std::size_t n_parseq_batches = batches.size();
-    std::size_t parseq_batch_offset = 0;
-    for (int64_t parseq_batch_index = 0; parseq_batch_index < n_parseq_batches; ++parseq_batch_index) {
-      std::vector<torch::Tensor> parseq_batch;
-      for (auto &text_region : batches[parseq_batch_index]) {
-        cv::Mat parseq_image_input;
-        cv::resize(text_region.second, parseq_image_input, cv::Size(128, 32));
-        cv::cvtColor(parseq_image_input, parseq_image_input, cv::COLOR_BGR2RGB);
+    // Transformer text regions into tensors for parseq model
+    std::vector<torch::Tensor> parseq_tensors;
+    for (auto &text_region : text_regions) {
+      cv::Mat parseq_image_input;
+      cv::resize(text_region.second, parseq_image_input, cv::Size(128, 32));
+      cv::cvtColor(parseq_image_input, parseq_image_input, cv::COLOR_BGR2RGB);
 
-        torch::Tensor parseq_image_tensor = torch::from_blob(parseq_image_input.data, {1, parseq_image_input.rows, parseq_image_input.cols, 3}, torch::kByte);
-        parseq_image_tensor = parseq_image_tensor.permute({0, 3, 1, 2});  // Rearrange dimensions to {1, 3, 32, 128}
-        parseq_image_tensor = parseq_image_tensor.to(torch::kFloat);
-        parseq_image_tensor = parseq_image_tensor.div(255.0);  // Normalize pixel values (0-255 -> 0-1)
-        parseq_batch.push_back(parseq_image_tensor);
-        predicted_text_bbox_pairs.push_back(std::make_pair("", text_region.first));  // Set placeholder text
-      }
-
-      const int num_threads = 4;
-
-      // This is the list of arguments to the model forward pass e.g.
-      // model.forward(x, y) in most cases this will only be a list of length 1
-      // e.g. model.forward(x) Don't confuse it with the batches.
-      std::vector<torch::jit::IValue> parseq_inputs;
-      torch::Tensor concat_batch = torch::cat(parseq_batch, 0);
-
-      parseq_inputs.push_back(concat_batch);
-
-      std::cout << " Running parseq forward pass..." << std::endl;
-      at::Tensor parseq_output = parseq_model.forward(parseq_inputs).toTensor();
-      auto parseq_pred = torch::softmax(parseq_output, -1);
-
-      std::cout << "Running tokenizer..." << std::endl;
-      Tokenizer tokenizer;
-      std::vector<std::string> token_batch = tokenizer.decode(parseq_pred, false);
-      std::size_t token_batch_size = token_batch.size();
-      for (int64_t token_item_index = 0; token_item_index < token_batch_size; ++token_item_index) {
-        std::string predicted_text;
-        for (const auto &token_char : token_batch[token_item_index]) {
-          if (token_char == tokenizer.EOS) {
-            break;
-          }
-          predicted_text.push_back(token_char);
-        }
-
-        predicted_text_bbox_pairs[parseq_batch_offset + token_item_index].first = predicted_text;
-      }
-      parseq_batch_offset += token_batch_size;
+      torch::Tensor parseq_tensor = torch::from_blob(parseq_image_input.data, {1, parseq_image_input.rows, parseq_image_input.cols, 3}, torch::kByte);
+      parseq_tensor = parseq_tensor.permute({0, 3, 1, 2});
+      parseq_tensor = parseq_tensor.to(torch::kFloat);
+      parseq_tensor = parseq_tensor.div(255.0);
+      parseq_tensors.push_back(parseq_tensor);
     }
+
+    std::queue<torch::Tensor> input_queue;
+    // std::vector<torch::Tensor> input_chunks = parseq_tensors.chunk((parseq_tensors.size(0) + 3) / 4, 0);
+
+    int chunk_size = 4;
+    for (size_t i = 0; i < parseq_tensors.size(); i += chunk_size) {
+        // Create a new chunk using elements from the current index to the next n elements
+        std::vector<torch::Tensor> chunk(parseq_tensors.begin() + i, parseq_tensors.begin() + std::min(i + chunk_size, parseq_tensors.size()));
+
+        // Add the chunk to the result vector
+        input_queue.push(torch::cat(chunk, 0));
+    }
+
+    // Set the number of threads you want to use (at most 4)
+    const int num_threads = 6;
+
+    std::vector<std::thread> threads;
+    std::vector<torch::Tensor> parseq_outputs;
+    std::mutex input_mutex, output_mutex;
+
+    for (int i = 0; i < num_threads; i++) {
+      threads.emplace_back(infer, std::ref(parseq_model), std::ref(input_queue), std::ref(parseq_outputs), std::ref(input_mutex), std::ref(output_mutex));
+    }
+
+    for (auto &thread : threads) {
+      if (thread.joinable()) {
+        thread.join();
+      }
+    }
+
+    torch::Tensor output = torch::cat(parseq_outputs, 0);
+    std::cout << "Output tensor: " << output.sizes() << std::endl;
+
+    // ==== Old Code ====
+    // std::vector<std::pair<std::string, cv::RotatedRect>> predicted_text_bbox_pairs;
+    // std::vector<std::vector<std::pair<cv::RotatedRect, cv::Mat>>> batches = make_recognizer_model_batches(text_regions, 4);
+    // std::size_t n_parseq_batches = batches.size();
+    // std::size_t parseq_batch_offset = 0;
+    // for (int64_t parseq_batch_index = 0; parseq_batch_index < n_parseq_batches; ++parseq_batch_index) {
+    //   std::vector<torch::Tensor> parseq_batch;
+    //   for (auto &text_region : batches[parseq_batch_index]) {
+    //     cv::Mat parseq_image_input;
+    //     cv::resize(text_region.second, parseq_image_input, cv::Size(128, 32));
+    //     cv::cvtColor(parseq_image_input, parseq_image_input, cv::COLOR_BGR2RGB);
+
+    //     torch::Tensor parseq_image_tensor = torch::from_blob(parseq_image_input.data, {1, parseq_image_input.rows, parseq_image_input.cols, 3}, torch::kByte);
+    //     parseq_image_tensor = parseq_image_tensor.permute({0, 3, 1, 2});  // Rearrange dimensions to {1, 3, 32, 128}
+    //     parseq_image_tensor = parseq_image_tensor.to(torch::kFloat);
+    //     parseq_image_tensor = parseq_image_tensor.div(255.0);  // Normalize pixel values (0-255 -> 0-1)
+    //     parseq_batch.push_back(parseq_image_tensor);
+    //     predicted_text_bbox_pairs.push_back(std::make_pair("", text_region.first));  // Set placeholder text
+    //   }
+
+    //   // This is the list of arguments to the model forward pass e.g.
+    //   // model.forward(x, y) in most cases this will only be a list of length 1
+    //   // e.g. model.forward(x) Don't confuse it with the batches.
+    //   std::vector<torch::jit::IValue> parseq_inputs;
+    //   torch::Tensor concat_batch = torch::cat(parseq_batch, 0);
+
+    //   parseq_inputs.push_back(concat_batch);
+
+    //   std::cout << " Running parseq forward pass..." << std::endl;
+    //   at::Tensor parseq_output = parseq_model.forward(parseq_inputs).toTensor();
+    //   auto parseq_pred = torch::softmax(parseq_output, -1);
+
+    //   std::cout << "Running tokenizer..." << std::endl;
+    //   Tokenizer tokenizer;
+    //   std::vector<std::string> token_batch = tokenizer.decode(parseq_pred, false);
+    //   std::size_t token_batch_size = token_batch.size();
+    //   for (int64_t token_item_index = 0; token_item_index < token_batch_size; ++token_item_index) {
+    //     std::string predicted_text;
+    //     for (const auto &token_char : token_batch[token_item_index]) {
+    //       if (token_char == tokenizer.EOS) {
+    //         break;
+    //       }
+    //       predicted_text.push_back(token_char);
+    //     }
+
+    //     predicted_text_bbox_pairs[parseq_batch_offset + token_item_index].first = predicted_text;
+    //   }
+    //   parseq_batch_offset += token_batch_size;
+    // }
 
     auto end_time = std::chrono::high_resolution_clock::now();
     auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
     std::cout << "Elapsed time: " << (elapsed_time * 0.001) << " seconds " << std::endl;
 
-    if (debug_mode == "1") {
-      std::size_t n_predicted_pairs = predicted_text_bbox_pairs.size();
-      for (int64_t pred_pair_index = 0; pred_pair_index < n_predicted_pairs; ++pred_pair_index) {
-        // Draw the detected boxes on the image
-        cv::Point2f corners[4];
-        predicted_text_bbox_pairs[pred_pair_index].second.points(corners);
-        std::vector<cv::Point> corners_vec(corners, corners + 4);
-        cv::polylines(image, corners_vec, true, cv::Scalar(0, 255, 0), 2);
+    // if (debug_mode == "1") {
+    //   std::size_t n_predicted_pairs = predicted_text_bbox_pairs.size();
+    //   for (int64_t pred_pair_index = 0; pred_pair_index < n_predicted_pairs; ++pred_pair_index) {
+    //     // Draw the detected boxes on the image
+    //     cv::Point2f corners[4];
+    //     predicted_text_bbox_pairs[pred_pair_index].second.points(corners);
+    //     std::vector<cv::Point> corners_vec(corners, corners + 4);
+    //     cv::polylines(image, corners_vec, true, cv::Scalar(0, 255, 0), 2);
 
-        // Draw the text inside the bounding box
-        const std::string &predicted_text = predicted_text_bbox_pairs[pred_pair_index].first;
-        cv::Point text_origin(corners[0].x, corners[0].y);  // You can adjust the position as needed
-        int font_face = cv::FONT_HERSHEY_SIMPLEX;
-        double font_scale = 0.5;
-        int font_thickness = 2;
-        cv::Scalar text_color(0, 0, 255);  // BGR color: red
-        cv::putText(image, predicted_text, text_origin, font_face, font_scale, text_color, font_thickness);
-      }
+    //     // Draw the text inside the bounding box
+    //     const std::string &predicted_text = predicted_text_bbox_pairs[pred_pair_index].first;
+    //     cv::Point text_origin(corners[0].x, corners[0].y);  // You can adjust the position as needed
+    //     int font_face = cv::FONT_HERSHEY_SIMPLEX;
+    //     double font_scale = 0.5;
+    //     int font_thickness = 2;
+    //     cv::Scalar text_color(0, 0, 255);  // BGR color: red
+    //     cv::putText(image, predicted_text, text_origin, font_face, font_scale, text_color, font_thickness);
+    //   }
 
-      cv::namedWindow("Results", cv::WINDOW_NORMAL);
-      cv::imshow("Results", image);
-      cv::waitKey(0);
-    }
+    //   cv::namedWindow("Results", cv::WINDOW_NORMAL);
+    //   cv::imshow("Results", image);
+    //   cv::waitKey(0);
+    // }
 
-    std::string json_str = to_json(predicted_text_bbox_pairs);
-    save_to_file(outputs_dir + "/" + image_file_name + "_results.json", json_str);
+    // std::string json_str = to_json(predicted_text_bbox_pairs);
+    // save_to_file(outputs_dir + "/" + image_file_name + "_results.json", json_str);
   }
 
   return 0;
