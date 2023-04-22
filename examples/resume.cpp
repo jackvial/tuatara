@@ -2,7 +2,7 @@
 
 // Main file
 int main(int argc, const char** argv) {
-    run_ocr(
+    image_to_data(
         argv[1],
         argv[2],
         argv[3],

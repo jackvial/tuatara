@@ -362,7 +362,7 @@ void infer(
   }
 }
 
-int run_ocr(std::string image_path, std::string weights_dir, std::string outputs_dir, std::string debug_mode) {
+int image_to_data(std::string image_path, std::string weights_dir, std::string outputs_dir, std::string debug_mode) {
   if (image_path.empty()) {
     std::cerr << "Please provide a value for image_path" << std::endl;
     return -1;
