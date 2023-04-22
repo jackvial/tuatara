@@ -1,9 +1,14 @@
 #include "tuatara.h"
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/opencv.hpp>
 
 // Main file
 int main(int argc, const char** argv) {
+     std::string image_path = argv[1];
+     cv::Mat image = cv::imread(image_path, cv::IMREAD_COLOR);
+    
     image_to_data(
-        argv[1],
+        image,
         argv[2],
         argv[3],
         argv[4]

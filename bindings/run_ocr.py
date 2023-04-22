@@ -1,5 +1,7 @@
 import sys
 import numpy as np
+import cv2
+from PIL import Image
 
 sys.path.append("../build/bindings/")
 import pytuatara
@@ -13,8 +15,15 @@ def main():
     #     "0"
     # )
 
-    print("Test array interface")
-    add_arrays_res = pytuatara.add_arrays(np.array([1, 2, 3]), np.array([4, 5, 6]))
-    print("add_arrays_res: ", add_arrays_res)
+
+    image = Image.open('/Users/jackvial/Code/CPlusPlus/tuatara/images/art-01107.jpg')
+    numpy_image = np.array(image)
+    sobel_image_numpy = pytuatara.image_to_data(numpy_image, "../weights", "../outputs", "0")
+    
+    # Convert the filtered NumPy array back to a PIL image
+    sobel_image = Image.fromarray(sobel_image_numpy)
+
+    # Save the filtered image
+    sobel_image.save('/Users/jackvial/Code/CPlusPlus/tuatara/images/art-01107-interface-test.jpg')
 
 main()

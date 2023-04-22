@@ -362,11 +362,11 @@ void infer(
   }
 }
 
-int image_to_data(std::string image_path, std::string weights_dir, std::string outputs_dir, std::string debug_mode) {
-  if (image_path.empty()) {
-    std::cerr << "Please provide a value for image_path" << std::endl;
-    return -1;
-  }
+int image_to_data(cv::Mat image, std::string weights_dir, std::string outputs_dir, std::string debug_mode) {
+//   if (image_path.empty()) {
+//     std::cerr << "Please provide a value for image_path" << std::endl;
+//     return -1;
+//   }
 
   if (weights_dir.empty()) {
     std::cerr << "Please provide a value for weights_dir" << std::endl;
@@ -398,9 +398,9 @@ int image_to_data(std::string image_path, std::string weights_dir, std::string o
   std::cout << "craft model loaded" << std::endl;
 
   // std::string image_path = "../images/resume_example.png";
-  std::string image_file_name = get_file_name_from_path(image_path);
-  cv::Mat image = cv::imread(image_path, cv::IMREAD_COLOR);
-  cv::Mat image_original = cv::imread(image_path, cv::IMREAD_COLOR);
+//   std::string image_file_name = get_file_name_from_path(image_path);
+//   cv::Mat image = cv::imread(image_path, cv::IMREAD_COLOR);
+//   cv::Mat image_original = cv::imread(image_path, cv::IMREAD_COLOR);
   if (image.empty()) {
     std::cerr << "Error reading image from file";
     return -1;
@@ -485,7 +485,7 @@ int image_to_data(std::string image_path, std::string weights_dir, std::string o
       }
 
       // Save all_cropped_images
-      cv::imwrite(outputs_dir + "/" + image_file_name + "_detector_crops.jpg", all_cropped_images);
+    //   cv::imwrite(outputs_dir + "/" + image_file_name + "_detector_crops.jpg", all_cropped_images);
     }
 
     // ==== Recognition Stage ====
@@ -607,7 +607,7 @@ int image_to_data(std::string image_path, std::string weights_dir, std::string o
     }
 
     std::string json_str = to_json(predicted_text_bbox_pairs);
-    save_to_file(outputs_dir + "/" + image_file_name + "_results.json", json_str);
+    // save_to_file(outputs_dir + "/" + image_file_name + "_results.json", json_str);
   }
 
   return 0;
