@@ -31,7 +31,7 @@ def main():
     # so the user doesn't have to worry about it. Also allow for passing a raw numpy array.
     image = Image.open('/Users/jackvial/Code/CPlusPlus/tuatara/images/resume_example.png').convert("RGB")
     numpy_image = np.array(image)
-    result = pytuatara.image_to_data(numpy_image, "../weights", "../outputs", "0")
+    result = pytuatara.image_to_data(numpy_image, "../weights", "../outputs")
     print(result)
     
     annotated_image = draw_boxes_and_text(numpy_image, result)
