@@ -252,34 +252,7 @@ std::vector<cv::RotatedRect> adjust_result_coordinates(const std::vector<cv::Rot
   return adjusted_polys;
 }
 
-std::vector<std::vector<std::pair<cv::RotatedRect, cv::Mat>>> make_recognizer_model_batches(const std::vector<std::pair<cv::RotatedRect, cv::Mat>> &input, int n) {
-  std::vector<std::vector<std::pair<cv::RotatedRect, cv::Mat>>> chunks;
-
-  int chunk_size = input.size() / n;
-  int remainder = input.size() % n;
-
-  int start = 0;
-  for (int i = 0; i < n; ++i) {
-    int end = start + chunk_size + (i < remainder ? 1 : 0);
-    std::vector<std::pair<cv::RotatedRect, cv::Mat>> chunk(input.begin() + start, input.begin() + end);
-    chunks.push_back(chunk);
-    start = end;
-  }
-
-  return chunks;
-}
-
-std::string escape_json_string(const std::string &s) {
-  std::ostringstream o;
-  for (auto c : s) {
-    if (c == '"' || c == '\\') {
-      o << '\\';
-    }
-    o << c;
-  }
-  return o.str();
-}
-
+// @TODO - change bbox output to ints
 std::vector<float> rotated_rect_to_tesseract_format(const cv::RotatedRect &rect) {
   cv::Point2f vertices[4];
   rect.points(vertices);
@@ -289,12 +262,7 @@ std::vector<float> rotated_rect_to_tesseract_format(const cv::RotatedRect &rect)
   float min_y = std::min(std::min(vertices[0].y, vertices[1].y), std::min(vertices[2].y, vertices[3].y));
   float max_x = std::max(std::max(vertices[0].x, vertices[1].x), std::max(vertices[2].x, vertices[3].x));
   float max_y = std::max(std::max(vertices[0].y, vertices[1].y), std::max(vertices[2].y, vertices[3].y));
-
-  // Rounding to 2 decimal places
-//   min_x = std::round(min_x * 100.0) / 100.0;
-//   min_y = std::round(min_y * 100.0) / 100.0;
-//   max_x = std::round(max_x * 100.0) / 100.0;
-//   max_y = std::round(max_y * 100.0) / 100.0;
+  
   
   min_x = std::round(min_x);
   min_y = std::round(min_y);
@@ -303,21 +271,6 @@ std::vector<float> rotated_rect_to_tesseract_format(const cv::RotatedRect &rect)
 
   std::vector<float> result = {min_x, min_y, max_x, max_y};
   return result;
-}
-
-std::string to_json(const std::vector<std::pair<std::string, cv::RotatedRect>> &predicted_text_bbox_pairs) {
-  std::stringstream ss;
-  ss << "[";
-  for (size_t i = 0; i < predicted_text_bbox_pairs.size(); ++i) {
-    const auto &pair = predicted_text_bbox_pairs[i];
-    ss << "{\"text\": \"" << escape_json_string(pair.first) << "\", "
-       << "\"bbox\": " << rotated_rect_to_tesseract_format(pair.second) << "}";
-    if (i < predicted_text_bbox_pairs.size() - 1) {
-      ss << ", ";
-    }
-  }
-  ss << "]";
-  return ss.str();
 }
 
 std::vector<OutputItem> format_output(const std::vector<std::pair<std::string, cv::RotatedRect>> &predicted_text_bbox_pairs) {
@@ -331,29 +284,6 @@ std::vector<OutputItem> format_output(const std::vector<std::pair<std::string, c
   }
 
   return formatted_output;
-}
-
-void save_to_file(const std::string &filename, const std::string &content) {
-  std::ofstream file(filename);
-  if (!file.is_open()) {
-    std::cerr << "Unable to open file: " << filename << std::endl;
-  }
-
-  file << content;
-  file.close();
-}
-
-std::string get_file_name_from_path(const std::string &image_path) {
-  std::size_t start = image_path.find_last_of('/') + 1;
-  std::size_t end = image_path.find_last_of('.');
-  return image_path.substr(start, end - start);
-}
-
-bool parse_string_to_bool(const std::string &str) {
-  std::istringstream is(str);
-  bool result;
-  is >> std::boolalpha >> result;
-  return result;
 }
 
 void infer(torch::jit::script::Module &model, std::queue<std::pair<int, torch::Tensor>> &input_queue, std::vector<std::pair<int, torch::Tensor>> &outputs, std::mutex &input_mutex, std::mutex &output_mutex) {
@@ -381,12 +311,7 @@ void infer(torch::jit::script::Module &model, std::queue<std::pair<int, torch::T
   }
 }
 
-std::vector<OutputItem> image_to_data(cv::Mat image, std::string weights_dir, std::string outputs_dir, std::string debug_mode) {
-  //   if (image_path.empty()) {
-  //     std::cerr << "Please provide a value for image_path" << std::endl;
-  //     return {};
-  //   }
-
+std::vector<OutputItem> image_to_data(cv::Mat image, std::string weights_dir, std::string outputs_dir) {
   if (weights_dir.empty()) {
     std::cerr << "Please provide a value for weights_dir" << std::endl;
     return {};
@@ -457,7 +382,6 @@ std::vector<OutputItem> image_to_data(cv::Mat image, std::string weights_dir, st
   auto detector_output_tuple = detector_output.toTuple();
 
   torch::Tensor detector_output_1 = detector_output_tuple->elements()[0].toTensor();
-  // torch::Tensor output_tensor_2 = detector_output_tuple->elements()[1].toTensor();
 
   std::cout << "post processing craft predictions..." << std::endl;
   int64_t batch_size = detector_output_1.size(0);
@@ -493,22 +417,10 @@ std::vector<OutputItem> image_to_data(cv::Mat image, std::string weights_dir, st
     text_regions.push_back(std::make_pair(box, cropped_image));
   }
 
-  if (debug_mode == "1") {
-    cv::Mat all_cropped_images = cv::Mat::zeros(image.size(), image.type());
-    for (const cv::RotatedRect &box : boxes) {
-      cv::Mat cropped_image = image(box.boundingRect());
-      cropped_image.copyTo(all_cropped_images(box.boundingRect()));
-    }
-
-    // Save all_cropped_images
-    //   cv::imwrite(outputs_dir + "/" + image_file_name + "_detector_crops.jpg", all_cropped_images);
-  }
-
   // ==== Recognition Stage ====
   std::cout << "loading parseq model..." << std::endl;
 
   std::string parseq_model_path = weights_dir + "/parseq_torchscript.bin";
-  // std::string parseq_model_path = "../weights/parseq_int8_torchscript.pt";
 
   // Deserialize the TorchScript module from a file
   torch::jit::script::Module parseq_model;
@@ -595,30 +507,6 @@ std::vector<OutputItem> image_to_data(cv::Mat image, std::string weights_dir, st
   auto end_time = std::chrono::high_resolution_clock::now();
   auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
   std::cout << "Elapsed time: " << (elapsed_time * 0.001) << " seconds " << std::endl;
-
-  if (debug_mode == "1") {
-    std::size_t n_predicted_pairs = predicted_text_bbox_pairs.size();
-    for (int64_t pred_pair_index = 0; pred_pair_index < n_predicted_pairs; ++pred_pair_index) {
-      // Draw the detected boxes on the image
-      cv::Point2f corners[4];
-      predicted_text_bbox_pairs[pred_pair_index].second.points(corners);
-      std::vector<cv::Point> corners_vec(corners, corners + 4);
-      cv::polylines(image, corners_vec, true, cv::Scalar(0, 255, 0), 2);
-
-      // Draw the text inside the bounding box
-      const std::string &predicted_text = predicted_text_bbox_pairs[pred_pair_index].first;
-      cv::Point text_origin(corners[0].x, corners[0].y);  // You can adjust the position as needed
-      int font_face = cv::FONT_HERSHEY_SIMPLEX;
-      double font_scale = 0.5;
-      int font_thickness = 2;
-      cv::Scalar text_color(0, 0, 255);  // BGR color: red
-      cv::putText(image, predicted_text, text_origin, font_face, font_scale, text_color, font_thickness);
-    }
-
-    cv::namedWindow("Results", cv::WINDOW_NORMAL);
-    cv::imshow("Results", image);
-    cv::waitKey(0);
-  }
 
   return format_output(predicted_text_bbox_pairs);
 }

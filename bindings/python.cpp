@@ -40,9 +40,9 @@ py::dict output_item_to_dict(const OutputItem &item) {
   return d;
 }
 
-py::list image_to_data_wrapper(py::array_t<unsigned char> image_data, std::string weights_dir, std::string output_dir, std::string debug) {
+py::list image_to_data_wrapper(py::array_t<unsigned char> image_data, std::string weights_dir, std::string output_dir) {
   cv::Mat img = buffer_to_mat(image_data);
-  std::vector<OutputItem> items = image_to_data(img, weights_dir, output_dir, debug);
+  std::vector<OutputItem> items = image_to_data(img, weights_dir, output_dir);
   py::list result;
   for (const auto &item : items) {
     result.append(output_item_to_dict(item));
@@ -54,5 +54,5 @@ py::list image_to_data_wrapper(py::array_t<unsigned char> image_data, std::strin
 PYBIND11_MODULE(pytuatara, m) {
   m.doc() = "Tuatara ocr";
 
-  m.def("image_to_data", &image_to_data_wrapper, py::arg("image"), py::arg("weights_dir"), py::arg("outputs_dir"), py::arg("debug_mode"), "Extract text and bounding boxes from an image");
+  m.def("image_to_data", &image_to_data_wrapper, py::arg("image"), py::arg("weights_dir"), py::arg("outputs_dir"), "Extract text and bounding boxes from an image");
 }

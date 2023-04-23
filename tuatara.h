@@ -10,6 +10,6 @@ struct OutputItem {
   std::vector<float> bbox;
 };
 
-std::vector<OutputItem> image_to_data(cv::Mat image, std::string weights_dir, std::string outputs_dir, std::string debug_mode);
+std::vector<OutputItem> image_to_data(cv::Mat image, std::string weights_dir, std::string outputs_dir);
 
 #endif  // TUATARA_H

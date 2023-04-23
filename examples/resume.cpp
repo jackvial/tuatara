@@ -8,6 +8,6 @@ int main(int argc, const char** argv) {
   std::string image_path = argv[1];
   cv::Mat image = cv::imread(image_path, cv::IMREAD_COLOR);
 
-  image_to_data(image, argv[2], argv[3], argv[4]);
+  image_to_data(image, argv[2], argv[3]);
   return 0;
 }

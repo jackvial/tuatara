@@ -19,7 +19,6 @@ def draw_boxes_and_text(image, results):
         font = cv2.FONT_HERSHEY_SIMPLEX
         font_scale = 0.5
         font_thickness = 1
-        text_size = cv2.getTextSize(text, font, font_scale, font_thickness)[0]
         text_x = x
         text_y = y - 5
         cv2.putText(image, text, (text_x, text_y), font, font_scale, (0, 0, 255), font_thickness)
