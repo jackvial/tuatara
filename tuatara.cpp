@@ -416,10 +416,6 @@ std::vector<OutputItem> image_to_data(cv::Mat image, std::string weights_dir, st
 
   std::cout << "craft model loaded" << std::endl;
 
-  // std::string image_path = "../images/resume_example.png";
-  //   std::string image_file_name = get_file_name_from_path(image_path);
-  //   cv::Mat image = cv::imread(image_path, cv::IMREAD_COLOR);
-  //   cv::Mat image_original = cv::imread(image_path, cv::IMREAD_COLOR);
   if (image.empty()) {
     std::cerr << "Error reading image from file";
     return {};
