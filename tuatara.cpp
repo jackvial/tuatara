@@ -1,3 +1,5 @@
+#include "tuatara.h"
+
 #include <torch/script.h>
 #include <torch/version.h>
 
@@ -278,7 +280,7 @@ std::string escape_json_string(const std::string &s) {
   return o.str();
 }
 
-std::string rotated_rect_to_tesseract_format(const cv::RotatedRect &rect) {
+std::vector<float> rotated_rect_to_tesseract_format(const cv::RotatedRect &rect) {
   cv::Point2f vertices[4];
   rect.points(vertices);
 
@@ -288,9 +290,19 @@ std::string rotated_rect_to_tesseract_format(const cv::RotatedRect &rect) {
   float max_x = std::max(std::max(vertices[0].x, vertices[1].x), std::max(vertices[2].x, vertices[3].x));
   float max_y = std::max(std::max(vertices[0].y, vertices[1].y), std::max(vertices[2].y, vertices[3].y));
 
-  std::stringstream ss;
-  ss << "[" << min_x << "," << min_y << "," << max_x << "," << max_y << "]";
-  return ss.str();
+  // Rounding to 2 decimal places
+//   min_x = std::round(min_x * 100.0) / 100.0;
+//   min_y = std::round(min_y * 100.0) / 100.0;
+//   max_x = std::round(max_x * 100.0) / 100.0;
+//   max_y = std::round(max_y * 100.0) / 100.0;
+  
+  min_x = std::round(min_x);
+  min_y = std::round(min_y);
+  max_x = std::round(max_x);
+  max_y = std::round(max_y);
+
+  std::vector<float> result = {min_x, min_y, max_x, max_y};
+  return result;
 }
 
 std::string to_json(const std::vector<std::pair<std::string, cv::RotatedRect>> &predicted_text_bbox_pairs) {
@@ -306,6 +318,19 @@ std::string to_json(const std::vector<std::pair<std::string, cv::RotatedRect>> &
   }
   ss << "]";
   return ss.str();
+}
+
+std::vector<OutputItem> format_output(const std::vector<std::pair<std::string, cv::RotatedRect>> &predicted_text_bbox_pairs) {
+  std::vector<OutputItem> formatted_output;
+
+  for (const auto &pair : predicted_text_bbox_pairs) {
+    OutputItem output_item;
+    output_item.text = pair.first;
+    output_item.bbox = rotated_rect_to_tesseract_format(pair.second);
+    formatted_output.push_back(output_item);
+  }
+
+  return formatted_output;
 }
 
 void save_to_file(const std::string &filename, const std::string &content) {
@@ -331,13 +356,7 @@ bool parse_string_to_bool(const std::string &str) {
   return result;
 }
 
-void infer(
-    torch::jit::script::Module &model,
-    std::queue<std::pair<int, torch::Tensor>> &input_queue,
-    std::vector<std::pair<int, torch::Tensor>> &outputs,
-    std::mutex &input_mutex,
-    std::mutex &output_mutex
-  ) {
+void infer(torch::jit::script::Module &model, std::queue<std::pair<int, torch::Tensor>> &input_queue, std::vector<std::pair<int, torch::Tensor>> &outputs, std::mutex &input_mutex, std::mutex &output_mutex) {
   torch::NoGradGuard no_grad;
 
   while (true) {
@@ -346,7 +365,7 @@ void infer(
       input_mutex.unlock();
       break;
     }
-    
+
     int input_idx = input_queue.front().first;
 
     std::vector<torch::jit::IValue> inputs;
@@ -362,20 +381,20 @@ void infer(
   }
 }
 
-int image_to_data(cv::Mat image, std::string weights_dir, std::string outputs_dir, std::string debug_mode) {
-//   if (image_path.empty()) {
-//     std::cerr << "Please provide a value for image_path" << std::endl;
-//     return -1;
-//   }
+std::vector<OutputItem> image_to_data(cv::Mat image, std::string weights_dir, std::string outputs_dir, std::string debug_mode) {
+  //   if (image_path.empty()) {
+  //     std::cerr << "Please provide a value for image_path" << std::endl;
+  //     return {};
+  //   }
 
   if (weights_dir.empty()) {
     std::cerr << "Please provide a value for weights_dir" << std::endl;
-    return -1;
+    return {};
   }
 
   if (outputs_dir.empty()) {
     std::cerr << "Please provide a value for outputs_dir" << std::endl;
-    return -1;
+    return {};
   }
 
   // Disable gradient calculation
@@ -392,18 +411,18 @@ int image_to_data(cv::Mat image, std::string weights_dir, std::string outputs_di
     detector_model = torch::jit::load(model_path);
   } catch (const c10::Error &e) {
     std::cerr << "error loading craft model";
-    return -1;
+    return {};
   }
 
   std::cout << "craft model loaded" << std::endl;
 
   // std::string image_path = "../images/resume_example.png";
-//   std::string image_file_name = get_file_name_from_path(image_path);
-//   cv::Mat image = cv::imread(image_path, cv::IMREAD_COLOR);
-//   cv::Mat image_original = cv::imread(image_path, cv::IMREAD_COLOR);
+  //   std::string image_file_name = get_file_name_from_path(image_path);
+  //   cv::Mat image = cv::imread(image_path, cv::IMREAD_COLOR);
+  //   cv::Mat image_original = cv::imread(image_path, cv::IMREAD_COLOR);
   if (image.empty()) {
     std::cerr << "Error reading image from file";
-    return -1;
+    return {};
   }
 
   cv::cvtColor(image, image, cv::COLOR_BGR2RGB);
@@ -436,7 +455,7 @@ int image_to_data(cv::Mat image, std::string weights_dir, std::string outputs_di
   torch::jit::IValue detector_output = detector_model.forward(detector_inputs);
   if (!detector_output.isTuple()) {
     std::cerr << "Model output is not a tuple\n";
-    return -1;
+    return {};
   }
 
   auto detector_output_tuple = detector_output.toTuple();
@@ -446,169 +465,164 @@ int image_to_data(cv::Mat image, std::string weights_dir, std::string outputs_di
 
   std::cout << "post processing craft predictions..." << std::endl;
   int64_t batch_size = detector_output_1.size(0);
-  for (int64_t batch_index = 0; batch_index < batch_size; ++batch_index) {
-    torch::Tensor current_batch = detector_output_1[batch_index];
 
-    // Separate the tensor into two tensors of dimensions 624 x 336
-    torch::Tensor score_text = current_batch.slice(2, 0, 1).squeeze(2);
-    torch::Tensor score_link = current_batch.slice(2, 1, 2).squeeze(2);
+  // Assume only one batch is ever passed to the detector model
+  torch::Tensor current_batch = detector_output_1[0];
 
-    // TODO - move these to a config struct
-    float text_threshold = 0.7;
-    float link_threshold = 0.4;
-    float low_text = 0.4;
-    auto result = get_detected_boxes(score_text, score_link, text_threshold, link_threshold, low_text);
+  // Separate the tensor into two tensors of dimensions 624 x 336
+  torch::Tensor score_text = current_batch.slice(2, 0, 1).squeeze(2);
+  torch::Tensor score_link = current_batch.slice(2, 1, 2).squeeze(2);
 
-    auto det = result.first;
-    auto labels = result.second;
+  // TODO - move these to a config struct
+  float text_threshold = 0.7;
+  float link_threshold = 0.4;
+  float low_text = 0.4;
+  auto result = get_detected_boxes(score_text, score_link, text_threshold, link_threshold, low_text);
 
-    // Scale bounding boxes to the input image * ratio
-    auto boxes = adjust_result_coordinates(det, ratio_w, ratio_h);
+  auto det = result.first;
+  auto labels = result.second;
 
-    std::vector<std::pair<cv::RotatedRect, cv::Mat>> text_regions;
-    for (const cv::RotatedRect &box : boxes) {
-      // Crop the rotated image using the bounding rectangle
-      // TODO - probably want to group the boxes horizontal if they are within
-      // some distance of each other this will probably give better results for
-      // the transformer model reading the text as there will be more context to
-      // infer the letters from. It will also mean less forward passes through
-      // the model.
-      cv::Mat cropped_image = image(box.boundingRect());
-      text_regions.push_back(std::make_pair(box, cropped_image));
-    }
+  // Scale bounding boxes to the input image * ratio
+  auto boxes = adjust_result_coordinates(det, ratio_w, ratio_h);
 
-    if (debug_mode == "1") {
-      cv::Mat all_cropped_images = cv::Mat::zeros(image.size(), image.type());
-      for (const cv::RotatedRect &box : boxes) {
-        cv::Mat cropped_image = image(box.boundingRect());
-        cropped_image.copyTo(all_cropped_images(box.boundingRect()));
-      }
-
-      // Save all_cropped_images
-    //   cv::imwrite(outputs_dir + "/" + image_file_name + "_detector_crops.jpg", all_cropped_images);
-    }
-
-    // ==== Recognition Stage ====
-    std::cout << "loading parseq model..." << std::endl;
-
-    std::string parseq_model_path = weights_dir + "/parseq_torchscript.bin";
-    // std::string parseq_model_path = "../weights/parseq_int8_torchscript.pt";
-
-    // Deserialize the TorchScript module from a file
-    torch::jit::script::Module parseq_model;
-    try {
-      parseq_model = torch::jit::load(parseq_model_path);
-    } catch (const c10::Error &e) {
-      std::cerr << "error loading the parseq model\n";
-      return -1;
-    }
-
-    std::cout << "parseq model loaded\n";
-
-    // Transformer text regions into tensors for parseq model
-    std::vector<torch::Tensor> parseq_tensors;
-    for (auto &text_region : text_regions) {
-      cv::Mat parseq_image_input;
-      cv::resize(text_region.second, parseq_image_input, cv::Size(128, 32));
-      cv::cvtColor(parseq_image_input, parseq_image_input, cv::COLOR_BGR2RGB);
-
-      torch::Tensor parseq_tensor = torch::from_blob(parseq_image_input.data, {1, parseq_image_input.rows, parseq_image_input.cols, 3}, torch::kByte);
-      parseq_tensor = parseq_tensor.permute({0, 3, 1, 2});
-      parseq_tensor = parseq_tensor.to(torch::kFloat);
-      parseq_tensor = parseq_tensor.div(255.0);
-      parseq_tensors.push_back(parseq_tensor);
-    }
-
-    std::queue<std::pair<int, torch::Tensor>> input_queue;
-
-    int chunk_size = 4;
-    for (size_t i = 0; i < parseq_tensors.size(); i += chunk_size) {
-      // Create a new chunk using elements from the current index to the next n elements
-      std::vector<torch::Tensor> chunk(parseq_tensors.begin() + i, parseq_tensors.begin() + std::min(i + chunk_size, parseq_tensors.size()));
-
-      // Add the chunk to the result vector
-      input_queue.push(std::make_pair(i, torch::cat(chunk, 0)));
-    }
-
-    const int num_threads = 6;
-
-    std::vector<std::thread> threads;
-    std::vector<std::pair<int, torch::Tensor>> parseq_outputs;
-    std::mutex input_mutex, output_mutex;
-
-    for (int i = 0; i < num_threads; i++) {
-      threads.emplace_back(infer, std::ref(parseq_model), std::ref(input_queue), std::ref(parseq_outputs), std::ref(input_mutex), std::ref(output_mutex));
-    }
-
-    for (auto &thread : threads) {
-      if (thread.joinable()) {
-        thread.join();
-      }
-    }
-    
-    // Sort the outputs based on their input indices
-    std::sort(parseq_outputs.begin(), parseq_outputs.end(), [](const std::pair<int, torch::Tensor>& a, const std::pair<int, torch::Tensor>& b) {
-        return a.first < b.first;
-    });
-    
-    std::vector<torch::Tensor> sorted_outputs;
-    for (const auto& output : parseq_outputs) {
-        sorted_outputs.push_back(output.second);
-    }
-
-    torch::Tensor parseq_output_tensor = torch::cat(sorted_outputs, 0);
-    auto parseq_pred = torch::softmax(parseq_output_tensor, -1);
-
-    std::cout << "Running tokenizer..." << std::endl;
-
-    std::vector<std::pair<std::string, cv::RotatedRect>> predicted_text_bbox_pairs;
-
-    Tokenizer tokenizer;
-    std::vector<std::string> tokens = tokenizer.decode(parseq_pred, false);
-    std::size_t tokens_size = tokens.size();
-    for (int64_t token_item_index = 0; token_item_index < tokens_size; ++token_item_index) {
-      std::string predicted_text;
-      for (const auto &token_char : tokens[token_item_index]) {
-        if (token_char == tokenizer.EOS) {
-          break;
-        }
-        predicted_text.push_back(token_char);
-      }
-
-      predicted_text_bbox_pairs.push_back(std::make_pair(predicted_text, text_regions[token_item_index].first));
-    }
-
-    auto end_time = std::chrono::high_resolution_clock::now();
-    auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
-    std::cout << "Elapsed time: " << (elapsed_time * 0.001) << " seconds " << std::endl;
-
-    if (debug_mode == "1") {
-      std::size_t n_predicted_pairs = predicted_text_bbox_pairs.size();
-      for (int64_t pred_pair_index = 0; pred_pair_index < n_predicted_pairs; ++pred_pair_index) {
-        // Draw the detected boxes on the image
-        cv::Point2f corners[4];
-        predicted_text_bbox_pairs[pred_pair_index].second.points(corners);
-        std::vector<cv::Point> corners_vec(corners, corners + 4);
-        cv::polylines(image, corners_vec, true, cv::Scalar(0, 255, 0), 2);
-
-        // Draw the text inside the bounding box
-        const std::string &predicted_text = predicted_text_bbox_pairs[pred_pair_index].first;
-        cv::Point text_origin(corners[0].x, corners[0].y);  // You can adjust the position as needed
-        int font_face = cv::FONT_HERSHEY_SIMPLEX;
-        double font_scale = 0.5;
-        int font_thickness = 2;
-        cv::Scalar text_color(0, 0, 255);  // BGR color: red
-        cv::putText(image, predicted_text, text_origin, font_face, font_scale, text_color, font_thickness);
-      }
-
-      cv::namedWindow("Results", cv::WINDOW_NORMAL);
-      cv::imshow("Results", image);
-      cv::waitKey(0);
-    }
-
-    std::string json_str = to_json(predicted_text_bbox_pairs);
-    // save_to_file(outputs_dir + "/" + image_file_name + "_results.json", json_str);
+  std::vector<std::pair<cv::RotatedRect, cv::Mat>> text_regions;
+  for (const cv::RotatedRect &box : boxes) {
+    // Crop the rotated image using the bounding rectangle
+    // TODO - probably want to group the boxes horizontal if they are within
+    // some distance of each other this will probably give better results for
+    // the transformer model reading the text as there will be more context to
+    // infer the letters from. It will also mean less forward passes through
+    // the model.
+    cv::Mat cropped_image = image(box.boundingRect());
+    text_regions.push_back(std::make_pair(box, cropped_image));
   }
 
-  return 0;
+  if (debug_mode == "1") {
+    cv::Mat all_cropped_images = cv::Mat::zeros(image.size(), image.type());
+    for (const cv::RotatedRect &box : boxes) {
+      cv::Mat cropped_image = image(box.boundingRect());
+      cropped_image.copyTo(all_cropped_images(box.boundingRect()));
+    }
+
+    // Save all_cropped_images
+    //   cv::imwrite(outputs_dir + "/" + image_file_name + "_detector_crops.jpg", all_cropped_images);
+  }
+
+  // ==== Recognition Stage ====
+  std::cout << "loading parseq model..." << std::endl;
+
+  std::string parseq_model_path = weights_dir + "/parseq_torchscript.bin";
+  // std::string parseq_model_path = "../weights/parseq_int8_torchscript.pt";
+
+  // Deserialize the TorchScript module from a file
+  torch::jit::script::Module parseq_model;
+  try {
+    parseq_model = torch::jit::load(parseq_model_path);
+  } catch (const c10::Error &e) {
+    std::cerr << "error loading the parseq model\n";
+    return {};
+  }
+
+  std::cout << "parseq model loaded\n";
+
+  // Transformer text regions into tensors for parseq model
+  std::vector<torch::Tensor> parseq_tensors;
+  for (auto &text_region : text_regions) {
+    cv::Mat parseq_image_input;
+    cv::resize(text_region.second, parseq_image_input, cv::Size(128, 32));
+    cv::cvtColor(parseq_image_input, parseq_image_input, cv::COLOR_BGR2RGB);
+
+    torch::Tensor parseq_tensor = torch::from_blob(parseq_image_input.data, {1, parseq_image_input.rows, parseq_image_input.cols, 3}, torch::kByte);
+    parseq_tensor = parseq_tensor.permute({0, 3, 1, 2});
+    parseq_tensor = parseq_tensor.to(torch::kFloat);
+    parseq_tensor = parseq_tensor.div(255.0);
+    parseq_tensors.push_back(parseq_tensor);
+  }
+
+  std::queue<std::pair<int, torch::Tensor>> input_queue;
+
+  int chunk_size = 4;
+  for (size_t i = 0; i < parseq_tensors.size(); i += chunk_size) {
+    // Create a new chunk using elements from the current index to the next n elements
+    std::vector<torch::Tensor> chunk(parseq_tensors.begin() + i, parseq_tensors.begin() + std::min(i + chunk_size, parseq_tensors.size()));
+
+    // Add the chunk to the result vector
+    input_queue.push(std::make_pair(i, torch::cat(chunk, 0)));
+  }
+
+  const int num_threads = 6;
+
+  std::vector<std::thread> threads;
+  std::vector<std::pair<int, torch::Tensor>> parseq_outputs;
+  std::mutex input_mutex, output_mutex;
+
+  for (int i = 0; i < num_threads; i++) {
+    threads.emplace_back(infer, std::ref(parseq_model), std::ref(input_queue), std::ref(parseq_outputs), std::ref(input_mutex), std::ref(output_mutex));
+  }
+
+  for (auto &thread : threads) {
+    if (thread.joinable()) {
+      thread.join();
+    }
+  }
+
+  // Sort the outputs based on their input indices
+  std::sort(parseq_outputs.begin(), parseq_outputs.end(), [](const std::pair<int, torch::Tensor> &a, const std::pair<int, torch::Tensor> &b) { return a.first < b.first; });
+
+  std::vector<torch::Tensor> sorted_outputs;
+  for (const auto &output : parseq_outputs) {
+    sorted_outputs.push_back(output.second);
+  }
+
+  torch::Tensor parseq_output_tensor = torch::cat(sorted_outputs, 0);
+  auto parseq_pred = torch::softmax(parseq_output_tensor, -1);
+
+  std::cout << "Running tokenizer..." << std::endl;
+
+  std::vector<std::pair<std::string, cv::RotatedRect>> predicted_text_bbox_pairs;
+
+  Tokenizer tokenizer;
+  std::vector<std::string> tokens = tokenizer.decode(parseq_pred, false);
+  std::size_t tokens_size = tokens.size();
+  for (int64_t token_item_index = 0; token_item_index < tokens_size; ++token_item_index) {
+    std::string predicted_text;
+    for (const auto &token_char : tokens[token_item_index]) {
+      if (token_char == tokenizer.EOS) {
+        break;
+      }
+      predicted_text.push_back(token_char);
+    }
+
+    predicted_text_bbox_pairs.push_back(std::make_pair(predicted_text, text_regions[token_item_index].first));
+  }
+
+  auto end_time = std::chrono::high_resolution_clock::now();
+  auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+  std::cout << "Elapsed time: " << (elapsed_time * 0.001) << " seconds " << std::endl;
+
+  if (debug_mode == "1") {
+    std::size_t n_predicted_pairs = predicted_text_bbox_pairs.size();
+    for (int64_t pred_pair_index = 0; pred_pair_index < n_predicted_pairs; ++pred_pair_index) {
+      // Draw the detected boxes on the image
+      cv::Point2f corners[4];
+      predicted_text_bbox_pairs[pred_pair_index].second.points(corners);
+      std::vector<cv::Point> corners_vec(corners, corners + 4);
+      cv::polylines(image, corners_vec, true, cv::Scalar(0, 255, 0), 2);
+
+      // Draw the text inside the bounding box
+      const std::string &predicted_text = predicted_text_bbox_pairs[pred_pair_index].first;
+      cv::Point text_origin(corners[0].x, corners[0].y);  // You can adjust the position as needed
+      int font_face = cv::FONT_HERSHEY_SIMPLEX;
+      double font_scale = 0.5;
+      int font_thickness = 2;
+      cv::Scalar text_color(0, 0, 255);  // BGR color: red
+      cv::putText(image, predicted_text, text_origin, font_face, font_scale, text_color, font_thickness);
+    }
+
+    cv::namedWindow("Results", cv::WINDOW_NORMAL);
+    cv::imshow("Results", image);
+    cv::waitKey(0);
+  }
+
+  return format_output(predicted_text_bbox_pairs);
 }

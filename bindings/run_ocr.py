@@ -8,22 +8,9 @@ import pytuatara
 
 
 def main():
-    # pytuatara.image_to_data(
-    #     "../images/resume_example.png",
-    #     "../weights",
-    #     "../outputs",
-    #     "0"
-    # )
-
-
-    image = Image.open('/Users/jackvial/Code/CPlusPlus/tuatara/images/art-01107.jpg')
+    image = Image.open('/Users/jackvial/Code/CPlusPlus/tuatara/images/resume_example.png')
     numpy_image = np.array(image)
-    sobel_image_numpy = pytuatara.image_to_data(numpy_image, "../weights", "../outputs", "0")
-    
-    # Convert the filtered NumPy array back to a PIL image
-    sobel_image = Image.fromarray(sobel_image_numpy)
-
-    # Save the filtered image
-    sobel_image.save('/Users/jackvial/Code/CPlusPlus/tuatara/images/art-01107-interface-test.jpg')
+    result = pytuatara.image_to_data(numpy_image, "../weights", "../outputs", "0")
+    print(result)
 
 main()
