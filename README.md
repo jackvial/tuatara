@@ -7,7 +7,7 @@
 
 ## Setup
 Run `./setup.sh` or do following steps
-1. Download model weights `git clone https://huggingface.co/jackvial/tuatara-ocr-craft-and-parseq weights`
+1. Download model weights `git clone https://huggingface.co/jackvial/tuatara-ocr-CRAFT-and-PARSEQ weights`
 2. Download LibTorch `curl -O https://download.pytorch.org/libtorch/cpu/libtorch-macos-2.0.0.zip && unzip libtorch-macos-2.0.0.zip`
 3. Install opencv `brew install opencv`
 4. Download and build pybind11 `git clone https://github.com/pybind/pybind11.git && cd pybind11 && mkdir build && cd build && cmake .. && make`
@@ -26,3 +26,8 @@ cmake ..
 - Install the CodeLLDB VSCode extension
 - Set a breakpoint in examples/resume.cpp or tuatara.cpp
 - Run the "Debug Resume Example" under the VSCode "Run and Debug" tab
+
+## Roadmap
+- [ ] Replace LibTorch dependency with Eigen implementations of CRAFT and PARSEQ models.
+- [ ] Replace OpenCV dependency with Eigen. OpenCV is mainly used for connected component labeling and other post processing after the CRAFT model based text detection stage. OpenCV may still be used in python examples for debugging results.
+- [ ] Retrain PARSEQ model to support a larger character set. The current model does not support the space character.
