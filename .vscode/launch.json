@@ -15,14 +15,6 @@
         "${workspaceFolder}/outputs/"
       ],
       "cwd": "${workspaceFolder}"
-    },
-    {
-      "name": "Python Parseq Debug",
-      "type": "python",
-      "request": "launch",
-      "program": "${workspaceFolder}/quants/parseq.py",
-      "console": "integratedTerminal",
-      "python": "${workspaceFolder}/quants/quants_env/bin/python3.11"
     }
   ]
 }

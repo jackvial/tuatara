@@ -93,11 +93,15 @@ def main():
     print(result)
 
     annotated_image = draw_boxes_and_text(numpy_image, result)
+    
+    # Save the annotated image
+    cv2.imwrite("../outputs/funsd_0001129658_annotated_with_ocr_results.png", annotated_image)
 
     # Display the annotated image in a window
     cv2.imshow("Annotated Image", annotated_image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
+    
 
 
 main()
