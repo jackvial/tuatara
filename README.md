@@ -7,8 +7,7 @@
 
 # Setup and Run
 ## Model Weights
-1. Save parseq-tiny `torchscript_model.bin` weights to the weights directory [parseq-tiny on huggingface](https://huggingface.co/baudm/parseq-tiny/tree/main) and rename to `parseq_torchscript.bin`
-2. 
+1. `git clone https://huggingface.co/jackvial/tuatara-ocr-craft-and-parseq weights`
 
 ## Libtorch
 - In root directory `curl -O https://download.pytorch.org/libtorch/cpu/libtorch-macos-2.0.0.zip && unzip libtorch-macos-2.0.0.zip`
