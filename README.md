@@ -6,8 +6,9 @@
 3. Minimal dependencies and small binary - The plan is to replace both the two main dependencies OpenCV and LibTorch with [Eigen](https://eigen.tuxfamily.org/index.php?title=Main_Page). I believe this will support goals 1 and 2.
 
 # Setup and Run
-1. Create a directory called weights
-1. `mkdir -p weights` `cd && curl -O https://huggingface.co/baudm/parseq-tiny/tree/main`
+## Model Weights
+1. Save parseq-tiny `torchscript_model.bin` weights to the weights directory [parseq-tiny on huggingface](https://huggingface.co/baudm/parseq-tiny/tree/main) and rename to `parseq_torchscript.bin`
+2. 
 
 ## Libtorch
 - In root directory `curl -O https://download.pytorch.org/libtorch/cpu/libtorch-macos-2.0.0.zip && unzip libtorch-macos-2.0.0.zip`
