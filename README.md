@@ -1,6 +1,13 @@
-# Setup
-## Weights
-- Save parseq weights to weights directory https://huggingface.co/baudm/parseq-tiny/tree/main
+# Tuatara: Deep Learning OCR Engine
+
+## Design Goals
+1. Easy to understand and hackable - All the main code is in tuatara.cpp and is currently about 500 LOC
+2. Preference for targeting CPU over GPU and focus on CPU performance
+3. Minimal dependencies and small binary - The plan is to replace both the two main dependencies OpenCV and LibTorch with [Eigen](https://eigen.tuxfamily.org/index.php?title=Main_Page). I believe this will support goals 1 and 2.
+
+# Setup and Run
+1. Create a directory called weights
+1. `mkdir -p weights` `cd && curl -O https://huggingface.co/baudm/parseq-tiny/tree/main`
 
 ## Libtorch
 - In root directory `curl -O https://download.pytorch.org/libtorch/cpu/libtorch-macos-2.0.0.zip && unzip libtorch-macos-2.0.0.zip`

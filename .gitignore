@@ -1,8 +1,9 @@
 parseq-tiny
 build
 libtorch
-weights
 outputs
 build_debug
 build_release
 pybind11
+weights/*.bin
+weights/*.pt
