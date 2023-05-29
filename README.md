@@ -21,3 +21,8 @@ cmake ..
 
 ## Run Example with Python Bindings
 - `cd bindings && python3 run_ocr.py`
+
+## Debug C++ in VSCode
+- Install the CodeLLDB VSCode extension
+- Set a breakpoint in examples/resume.cpp or tuatara.cpp
+- Run the "Debug Resume Example" under the VSCode "Run and Debug" tab
