@@ -1,7 +1,7 @@
 # Tuatara: Deep Learning OCR Engine
 
 ## Example
-![funsd_0001129658 annotated with OCR results](https://raw.githubusercontent.com/jackvial/tuatara/main/outputs/funsd_0001129658_annotated_with_ocr_results.png)
+![funsd_0001129658 annotated with OCR results](outputs/funsd_0001129658_annotated_with_ocr_results.png)
 
 ## Design Goals
 1. Easy to understand and hackable - All the main code is in tuatara.cpp and is currently about 500 LOC
