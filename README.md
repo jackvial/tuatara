@@ -1,5 +1,8 @@
 # Tuatara: Deep Learning OCR Engine
 
+## Example
+![funsd_0001129658 annotated with OCR results](https://raw.githubusercontent.com/jackvial/tuatara/main/outputs/funsd_0001129658_annotated_with_ocr_results.png)
+
 ## Design Goals
 1. Easy to understand and hackable - All the main code is in tuatara.cpp and is currently about 500 LOC
 2. Preference for targeting CPU over GPU and focus on CPU performance
@@ -27,7 +30,8 @@ cmake ..
 - Set a breakpoint in examples/resume.cpp or tuatara.cpp
 - Run the "Debug Resume Example" under the VSCode "Run and Debug" tab
 
-## Roadmap
-- [ ] Replace LibTorch dependency with Eigen implementations of CRAFT and PARSEQ models.
-- [ ] Replace OpenCV dependency with Eigen. OpenCV is mainly used for connected component labeling and other post processing after the CRAFT model based text detection stage. OpenCV may still be used in python examples for debugging results.
-- [ ] Retrain PARSEQ model to support a larger character set. The current model does not support the space character.
+## TODO
+- Replace LibTorch dependency with Eigen implementations of CRAFT and PARSEQ models.
+- Replace OpenCV dependency with Eigen. OpenCV is mainly used for connected component labeling and other post processing after the CRAFT model based text detection stage. OpenCV may still be used in python examples for debugging results.
+- Retrain PARSEQ model to support a larger character set. The current model does not support the space character.
+- Performance improvements: weight quantization, memory mapping, experiment with alternative model architectures, etc.
