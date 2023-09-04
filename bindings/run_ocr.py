@@ -89,7 +89,7 @@ def main():
         "../images/funsd_0001129658.png"
     ).convert("RGB")
     numpy_image = np.array(image)
-    result = pytuatara.image_to_data(numpy_image, "../weights", "../outputs")
+    result = pytuatara.image_to_data(numpy_image, "../../models", "../outputs")
     print(result)
 
     annotated_image = draw_boxes_and_text(numpy_image, result)

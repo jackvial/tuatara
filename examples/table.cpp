@@ -7,6 +7,6 @@
 int main(int argc, const char** argv) {
   std::string image_path = argv[1];
   cv::Mat image = cv::imread(image_path, cv::IMREAD_COLOR);
-  image_to_data(image, "../../weights", "../../outputs");
+  image_to_data(image, "../../models", "../../outputs");
   return 0;
 }
